@@ -12,7 +12,7 @@
   These sensors use I2C to communicate. The device's I2C address is 0x69
 
   Written by Richard Jenkins edited by Jacob Lawler
-  Copyright 2021, Richard Jenkins edited by Jacob Lawler
+  Copyright 2021, Richard Jenkins, Jacob Lawler
   This code is not opensource.
 
   IR Camera settup bassed on Writting of Dean Miller for Adafruit Industries.
