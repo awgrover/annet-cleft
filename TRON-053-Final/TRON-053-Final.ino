@@ -1,11 +1,13 @@
-
 /***************************************************************************
   TRON Tech
   
-  Uses the AMG88xx GridEYE 8x8 IR camera
+  Designed for the UNO.
+
+  Uses the AMG88xx GridEYE 8x8 IR camera:
 
   Designed specifically to work with the Adafruit AMG88 breakout
   ----> http://www.adafruit.com/products/3538
+  Library "Adafruit AMG88xx Library" , dependencies not required
 
   These sensors use I2C to communicate. The device's I2C address is 0x69
 
@@ -18,12 +20,13 @@
  ***************************************************************************/
 
 // Setuo for IR Camera
-#include <Wire.h>
-#include <Adafruit_AMG88xx.h>
+#include <Adafruit_AMG88xx.h> // "Adafruit AMG88xx Library", dependencies not required
+
+// comment out to do "random" motion w/o needing the camera:
+// #define USE_AMG88
 
 Adafruit_AMG88xx amg;
 
-float pixels[64];
 float oldPixels[64]; // used to compare
 int dif[64];   //difference of old and new pixels
 
@@ -32,27 +35,27 @@ int dif[64];   //difference of old and new pixels
 AccelStepper stepper1(1, 4, 2);
 AccelStepper stepper2(1 ,11, 7);
 
-
 void setup() 
 {
     // Setup for IR Camera
     Serial.begin(9600);
-    Serial.println(F("AMG88xx pixels"));
 
-    bool status;
-    
-    // default settings
-    status = amg.begin();
-    if (!status) {
-        Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
-        while (1);
-    }
-    
-    Serial.println("-- Pixels Test --");
+    #ifdef USE_AMG88
+      Serial.println(F("AMG88xx pixels"));
+      bool status;
+      // default settings
+      status = amg.begin();
+      if (!status) {
+          Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
+          while (1);
+      }
+      
+      Serial.println("-- Pixels Test --");
 
-    Serial.println();
+      Serial.println();
 
-    delay(100); // let sensor boot up
+      delay(100); // let sensor boot up
+    #endif
 
     //Setup for motors
     stepper1.setMaxSpeed(2500); //Steps per seconds
@@ -60,49 +63,29 @@ void setup()
 
     stepper2.setMaxSpeed(2500); //Steps per seconds
     stepper2.setAcceleration(1500); //Steps/sec^2
-
 }
 
 
 void loop() 
 {   
-    /************************************
-     *  IR Camera Image comparing  
-     ************************************/
-    // Read values of pixels array from camera
-    amg.readPixels(pixels); //Function to read variable
-    //int i; // Counter
-    
+    #ifdef USE_AMG88
+      // use ir-camera:
+      diff_image( oldPixels, dif);
+    #else
+      // Don't require ir-camera, do some random motion:
+      int fake_temp = 16 * random(3); // 0..2
+      dif[0] = dif[16] = dif[48] = 0;
+      dif[fake_temp] = 2; // has to be > 1
+    #endif
 
-//Serial.println(pixels[0]);
-//Go through each value and subtract old image by new image to find the difference
-    for (int i=0; i < 64; ++i)
-    {
-      dif[i] = pixels[i] - oldPixels[i]; // 0 is no change, positive is raised temperature of data point, and negative is drop in temperature.
-      oldPixels[i] = oldPixels[i]+dif[i];
-    }
-    //dif[0] = pixels[0] - oldPixels[0]; 
-    //oldPixels[0] = oldPixels[0]+dif[0];
-    
-    //Print difference array value for diagnosing
-    Serial.print("[");
-    for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
-      Serial.print(dif[i-1]);
-      Serial.print(", ");
-      if( i%8 == 0 ) Serial.println();
-    }
-    Serial.println("]");
-    Serial.println();
-    //delay(1000);   //Delay 1 second readings
-    
     /************************************
      * Motor output based on IR Camera reading
      ************************************/
-    int i;
+    // if temp increases: in top third [else], mid-third >=[16], bottom-third >=[48]
+    // run the pattern for that third
     int count = 0;
-    for (i=0; i <= 63; ++i)
+    for (int i=0; i <= 63; ++i)
       {
-        dif[i];
         count++;
         if (dif[i] > 1) //Doesnt acount for drop in temp because only works with positive difference values.
         {
@@ -174,3 +157,31 @@ void loop()
       }  
     }
     
+void diff_image( float oldPixels[], int dif[]) {
+    float pixels[64];
+
+    /************************************
+     *  IR Camera Image comparing  
+     ************************************/
+    // Read values of pixels array from camera
+    amg.readPixels(pixels); //Function to read variable
+
+    //Serial.println(pixels[0]);
+    //Go through each value and subtract old image by new image to find the difference
+    for (int i=0; i < 64; ++i)
+    {
+      dif[i] = pixels[i] - oldPixels[i]; // 0 is no change, positive is raised temperature of data point, and negative is drop in temperature.
+      oldPixels[i] = oldPixels[i]+dif[i];
+    }
+    
+    //Print difference array value for diagnosing
+    Serial.print("[");
+    for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
+      Serial.print(dif[i-1]);
+      Serial.print(", ");
+      if( i%8 == 0 ) Serial.println();
+    }
+    Serial.println("]");
+    Serial.println();
+    //delay(1000);   //Delay 1 second readings
+}
