@@ -5,7 +5,7 @@ class Cleft {
   PShape segment;
   boolean first_time = true;
 
-  PApplet p;
+  final PApplet p;
 
   static final int SEGMENT_CT=15;
   static final int in_circle = 11; // leaving rest for tips
@@ -23,10 +23,13 @@ class Cleft {
   static final float spacing = 0.05f * scale_up; // gap between
   static final float cleft_radius = 0.5f * scale_up;
 
-  Cleft(PApplet processing) { 
-    this.p=processing; 
+  Cleft() { 
+
+    this.p=GlobalProcessing.P; 
     make_segment();
     reset();
+    p.println("I'm " + this.getClass().getName());
+    p.println(" ... " + this.getClass().getPackage());
   }
 
   void reset() {
@@ -61,7 +64,7 @@ class Cleft {
     // around circle
     final float interval = p.PI/(in_circle - 1)  ; // used 4 in tips
     final int per_tip = (SEGMENT_CT - in_circle) / 2;
-    for (int segment_i=per_tip;segment_i<in_circle+per_tip; segment_i++) {
+    for (int segment_i=per_tip; segment_i<in_circle+per_tip; segment_i++) {
       p.pushMatrix();
       p.rotateZ((segment_i-per_tip) * interval - p.PI/2);
       p.translate( 0, - cleft_radius  );
@@ -81,7 +84,7 @@ class Cleft {
     float rotation = (float) Math.atan( height[segment_i] / depth );
     p.rotateX( rotation ); // so the inner-edge is still at z=0, because it was on xy
   }
-  
+
   void move(int segment_i, float distance) {
     if (segment_i >= 0 && segment_i < SEGMENT_CT) {
       height[segment_i] += distance * scale_up;

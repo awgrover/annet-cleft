@@ -7,21 +7,33 @@ Visualizing the animations
 static boolean mouse_down = false;
 static PVector mouse_start = new PVector();
 static PVector last_mouse = new PVector();
+static PVector last_rotate = new PVector(0, -PI/8, 0); // start tilted
 static PVector rotate = new PVector();
-static PVector last_rotate = new PVector();
 
 static Cleft cleft;
+
 static int segment_i; // selected segment to operate on
 
+Arduino arduino;
+
 void setup() {
+  GlobalProcessing.P = this;
+  
+  println("I'm " + this.getClass().getName());
+  println(" ... " + this.getClass().getPackage());
   size(1200, 924, P3D);
   fill(255);
 
-  cleft = new Cleft(this);
+  rotate.set( last_rotate );
+  
+  cleft = new Cleft();
 
   println("1..9,a..f select segment");
   println("up/down move segment");
   println("del resets heights");
+  
+  arduino = new Arduino();
+  arduino.setup();
 }
 
 void draw() {
@@ -96,7 +108,7 @@ void mouseReleased() {
 public void mouseClicked(MouseEvent evt) {
   if (evt.getCount() == 2) {
     // double-click
-    rotate.set(0.0, 0.0);
+    rotate.set(0.0, 0.0, 0.0);
     last_rotate.set(rotate);
   }
 }
