@@ -1,3 +1,9 @@
+/*
+Visualizing the animations
+ 1. framework for drawing a "cleft" visualization
+ 2. framework for "c++" like code of doing animations (minimal port work)
+ */
+
 static boolean mouse_down = false;
 static PVector mouse_start = new PVector();
 static PVector last_mouse = new PVector();
@@ -5,13 +11,17 @@ static PVector rotate = new PVector();
 static PVector last_rotate = new PVector();
 
 static Cleft cleft;
+static int segment_i; // selected segment to operate on
 
 void setup() {
   size(1200, 924, P3D);
   fill(255);
-  
+
   cleft = new Cleft(this);
 
+  println("0..9,a..e select segment");
+  println("up/down move segment");
+  println("del resets heights");
 }
 
 void draw() {
@@ -63,7 +73,7 @@ void draw() {
   // draw and orient each segment
   fill(255);
 
-  
+
   cleft.render();
 }
 
@@ -83,5 +93,34 @@ public void mouseClicked(MouseEvent evt) {
     // double-click
     rotate.set(0.0, 0.0);
     last_rotate.set(rotate);
+  }
+}
+
+void keyPressed() {
+  if (key != CODED) {
+    // ascii's 0..9,a..e -> 0..14 
+    if (key >= '0' && key <= '9') {
+      segment_i = int(key) - int('0');
+    } else if (key >= 'a' && key <= 'e') {
+      segment_i = int(key) - int('A');
+    } else if (int(key) == 127) {
+      cleft.reset();
+    } else if (int(key) == 43) {
+      cleft.move(segment_i, -10);
+    } else if (int(key) == 45) {
+      cleft.move(segment_i, 10);
+    } else {
+      println("what " + int(key) + " " + keyCode);
+    }
+  } else {
+    // special keys, like arrows
+    if (keyCode == 38) {
+      cleft.move( segment_i, -1);
+    } else if (keyCode == 40) {
+      // downarrow
+      cleft.move( segment_i, +1);
+    } else {
+      println("whatx " + int(key) + " " + keyCode);
+    }
   }
 }

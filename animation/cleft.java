@@ -19,11 +19,15 @@ class Cleft {
   Cleft(PApplet processing) { 
     this.p=processing; 
     make_segment();
+    reset();
+  }
 
+  void reset() {
     for (float h : height ) {
       h=0.0f;
     }
   }
+  
   void render() {
     p.pushMatrix();
     // we start with inner-edge on x axis, in the xy plane, centered at x=0
@@ -32,6 +36,14 @@ class Cleft {
     p.rotateX( rotation ); // so the inner-edge is still at z=0, because it was on xy
     p.shape(segment);
     p.popMatrix();
+  }
+
+  void move(int segment_i, float distance) {
+    if (segment_i >= 0 && segment_i < SEGMENT_CT) {
+      height[segment_i] += distance;
+    } else {
+      p.println("bad segment_i " + segment_i);
+    }
   }
 
   void make_segment() {
