@@ -65,7 +65,7 @@ void draw() {
 
   // set camera to current pan/tilt (from above)
   // "default" camera will have y pointing at us, z up, x to right
-  float orbitRadius= width;
+  final float orbitRadius= width + Cleft.depth;
   float ypos= sin(TWO_PI * rotate.x + PI/2)*orbitRadius;
   ; // mouseY/3;
   //float xpos= cos(radians(rotation))*orbitRadius;
@@ -86,8 +86,8 @@ void mousePressed() {
   mouse_down = true; 
   mouse_start.set(mouseX, mouseY);
   last_mouse.set(-1, -1);
-  print("Startat "); 
-  println(mouse_start);
+  //print("Startat "); 
+  //println(mouse_start);
 }
 void mouseReleased() { 
   mouse_down = false;
@@ -113,19 +113,19 @@ void keyPressed() {
     } else if (int(key) == 127) {
       cleft.reset();
     } else if (int(key) == 43) {
-      cleft.move(segment_i, -10);
+      cleft.move(segment_i, -0.1);
     } else if (int(key) == 45) {
-      cleft.move(segment_i, 10);
+      cleft.move(segment_i, 0.1);
     } else {
       println("what " + int(key) + " " + keyCode);
     }
   } else {
     // special keys, like arrows
     if (keyCode == 38) {
-      cleft.move( segment_i, -1);
+      cleft.move( segment_i, -0.01);
     } else if (keyCode == 40) {
       // downarrow
-      cleft.move( segment_i, +1);
+      cleft.move( segment_i, +0.01);
     } else {
       println("whatx " + int(key) + " " + keyCode);
     }

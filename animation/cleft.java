@@ -81,9 +81,10 @@ class Cleft {
     float rotation = (float) Math.atan( height[segment_i] / depth );
     p.rotateX( rotation ); // so the inner-edge is still at z=0, because it was on xy
   }
+  
   void move(int segment_i, float distance) {
     if (segment_i >= 0 && segment_i < SEGMENT_CT) {
-      height[segment_i] += distance;
+      height[segment_i] += distance * scale_up;
     } else {
       p.println("bad segment_i " + segment_i);
     }
