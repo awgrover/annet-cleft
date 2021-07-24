@@ -19,6 +19,7 @@ Arduino arduino;
 void setup() {
   GlobalProcessing.P = this;
   
+  println("Java " + System.getProperty("java.version"));
   println("I'm " + this.getClass().getName());
   println(" ... " + this.getClass().getPackage());
   size(1200, 924, P3D);
@@ -27,7 +28,9 @@ void setup() {
   rotate.set( last_rotate );
   
   cleft = new Cleft();
-
+  for (int i=0; i<cleft.height.length; i++) cleft.move(i, random(-1.0, 1.0));
+  println(cleft.height);
+  
   println("1..9,a..f select segment");
   println("up/down move segment");
   println("del resets heights");
@@ -37,6 +40,8 @@ void setup() {
 }
 
 void draw() {
+  arduino.loop();
+  
   background(90);
   
   fill(0,0,255);
@@ -90,7 +95,7 @@ void draw() {
   // draw and orient each segment
   fill(255);
 
-
+  // print("CH ");println(cleft.height);
   cleft.render();
 }
 
@@ -108,7 +113,7 @@ void mouseReleased() {
 public void mouseClicked(MouseEvent evt) {
   if (evt.getCount() == 2) {
     // double-click
-    rotate.set(0.0, 0.0, 0.0);
+    rotate.set(0.0, -PI/8, 0.0);
     last_rotate.set(rotate);
   }
 }

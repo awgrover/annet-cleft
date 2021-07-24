@@ -34,9 +34,7 @@ class Cleft {
 
   void reset() {
     first_time = true;
-    for (float h : height ) {
-      h=0.0f;
-    }
+    for (int i=0; i<height.length; i++) height[i] = 0.0f;
   }
 
   void render() {
