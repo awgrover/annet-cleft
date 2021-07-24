@@ -19,15 +19,20 @@ void setup() {
 
   cleft = new Cleft(this);
 
-  println("0..9,a..e select segment");
+  println("1..9,a..f select segment");
   println("up/down move segment");
   println("del resets heights");
 }
 
 void draw() {
   background(90);
-  fill(255);
+  
+  fill(0,0,255);
+  stroke(0,90,255);
+  sphere(20);
 
+  stroke(0);
+  
   // x,y,z indicators: green, red, gray=z
   pushMatrix();
   fill(0, 255, 0);
@@ -98,11 +103,13 @@ public void mouseClicked(MouseEvent evt) {
 
 void keyPressed() {
   if (key != CODED) {
-    // ascii's 0..9,a..e -> 0..14 
+    // ascii's 1..9,a..e -> 0..14 
     if (key >= '0' && key <= '9') {
-      segment_i = int(key) - int('0');
-    } else if (key >= 'a' && key <= 'e') {
-      segment_i = int(key) - int('A');
+      segment_i = int(key) - int('1');
+      println("select " + segment_i);
+    } else if (key >= 'a' && key <= 'f') {
+      segment_i = int(key) - int('a') + 10 - 1; // a is 10th which is [9]
+      println("select " + segment_i);
     } else if (int(key) == 127) {
       cleft.reset();
     } else if (int(key) == 43) {
