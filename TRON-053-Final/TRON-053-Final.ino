@@ -24,6 +24,8 @@
 
 // comment out to do "random" motion w/o needing the camera:
 // #define USE_AMG88
+// comment out to use "native"/bit-bang AccelStepper pins
+#define USE_MOTORSHIELD
 
 Adafruit_AMG88xx amg;
 
@@ -31,9 +33,27 @@ float oldPixels[64]; // used to compare
 int dif[64];   //difference of old and new pixels
 
 //Setup for motors
-#include<AccelStepper.h> //Stepper motor Library
+#include <AccelStepper.h> //Stepper motor Library
+#ifdef USE_MOTORSHIELD
+// this is using the motor shield(s)
+#include <AccelStepperMotorShield.h>
+Adafruit_MotorShield MotorShield1 = Adafruit_MotorShield(0x61); // shield #1
+  // Make it just like a AccelStepper
+AccelStepperMotorShield stepper1(
+                                  MotorShield1,
+                                  1, // stepper block #2
+                                  SINGLE // optional/default, the stepperBlock.step-style
+                                );
+AccelStepperMotorShield stepper2(
+                                  MotorShield1,
+                                  2, // stepper block #2
+                                  SINGLE // optional/default, the stepperBlock.step-style
+                                );
+#else
+// this is "direct" bit-banging, i.e. native AccelStepper
 AccelStepper stepper1(1, 4, 2);
 AccelStepper stepper2(1 , 11, 7);
+#endif
 
 void setup() {
   // Setup for IR Camera
@@ -54,14 +74,26 @@ void setup() {
   Serial.println();
 
   delay(100); // let sensor boot up
+#else
+  Serial.println("Random 'zone' instead of camera\n");
 #endif
 
   //Setup for motors
+#ifdef USE_MOTORSHIELD
+  stepper1.begin();
+#endif
   stepper1.setMaxSpeed(2500); //Steps per seconds
   stepper1.setAcceleration(1500); //Steps/sec^2
 
   stepper2.setMaxSpeed(2500); //Steps per seconds
   stepper2.setAcceleration(1500); //Steps/sec^2
+
+  Serial.println("stepper1");
+  stepper1.move(50);
+  stepper1.move(-50);
+  Serial.println("stepper2");
+  stepper2.move(50);
+  stepper2.move(-50);
 }
 
 
@@ -73,7 +105,7 @@ void loop() {
   // Don't require ir-camera, do some random motion:
   int fake_temp = 16 * random(3); // 0..2
   dif[0] = dif[16] = dif[48] = 0;
-  dif[fake_temp] = 2; // has to be > 1
+  dif[0] = 2; // has to be > 1
 #endif
 
   /************************************
@@ -87,6 +119,7 @@ void loop() {
     if (dif[i] > 1) { //Doesnt acount for drop in temp because only works with positive difference values.
       if (count >= 48) {
         // if with 3 terms
+        Serial.print(millis()); Serial.print(" ");
         Serial.println("Case 1");
         stepper1.move(6500);
         stepper1.runToPosition();
@@ -101,9 +134,12 @@ void loop() {
         stepper2.move(-6500);
         stepper2.runToPosition();
         delay(10);
+        Serial.print(millis()); Serial.print(" done\n");
+        break;
 
       }
       else if (count >= 16) {
+        Serial.print(millis()); Serial.print(" ");
         Serial.println("Case 2");
         stepper1.move(4000);
         stepper1.runToPosition();
@@ -117,9 +153,13 @@ void loop() {
         stepper2.move(-4000);
         stepper2.runToPosition();
         delay(10);
+        Serial.print(millis()); Serial.print(" done\n");
+        break;
       }
 
       else {
+        Serial.print(millis()); Serial.print(" ");
+        Serial.println("Case 3");
         stepper1.move(1500);
         stepper1.runToPosition();
         delay(10);
@@ -132,7 +172,7 @@ void loop() {
         stepper2.move(-1500);
         stepper2.runToPosition();
         delay(10);
-        Serial.println("Case 3");
+        Serial.print(millis()); Serial.print(" done\n");
         break;
       }
 
