@@ -1,3 +1,5 @@
+#pragma once
+
 // freeMemory() should give bytes of heap that are free
 // 
 #ifdef __arm__

@@ -15,5 +15,5 @@ class NoopBeastie : public Beastie {
   // setup(), begin(), loop() protocol
   virtual void setup() {};
   virtual void begin() {};
-  virtual void loop() {};
+  virtual void loop() { delay(20); }; // so integrate usb can respond to upload
 };

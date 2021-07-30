@@ -20,15 +20,22 @@
 #include "every.h"
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
-Print &operator <<(Print &obj, const __FlashStringHelper* arg) { obj.print(arg); return obj; }
+Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
+  obj.print(arg);
+  return obj;
+}
 
 constexpr int MOTOR_CT = 15;
 
+// NB: a #include list is auto-generated of extant .h files
+//  and it is alphabetical, so this order is not relevant
+//  and, in fact, is redundant for arduino-ide
 #include "beasties.h"
 #include "accel_beastie.h"
 #include "motor_bits.h"
 #include "spi_shift.h"
 #include "limit_switch.h"
+#include "AccelStepperShift.h"
 
 Every say_status(300);
 
@@ -38,15 +45,21 @@ Beastie *beast[] = {
   //new AccelBeastie(),
   //new MotorBits(),
   //new SPI_Shift(),
-  new LimitSwitch()
+  //new LimitSwitch(),
+  new AccelStepperShift(MOTOR_CT)
 };
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+  delay(2000); // allow uploading when cpu gets screwed
+  digitalWrite(LED_BUILTIN, LOW);
+
   const int base_memory = freeMemory();
   int last_free = base_memory;
 
   Serial.begin(115200); while (!Serial) {}
-
+  Serial << endl;
   Serial << F("Base ") << base_memory << endl;
   Serial << F("After Serial.begin ") << freeMemory() << endl;
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
@@ -77,7 +90,7 @@ void setup() {
 void loop() {
   unsigned long last_micros = micros();
   static ExponentialSmooth<unsigned long> elapsed(5);
-  
+
   for (Beastie* b : beast) {
     b->loop();
   }
@@ -85,11 +98,9 @@ void loop() {
   unsigned long now = micros();
   elapsed.average( now - last_micros  );
   last_micros = now;
-  
+
   if ( say_status() ) {
     Serial << F("Loop ") << elapsed.value() << " free " << freeMemory() << endl;
   }
-  
-  if (array_size(beast) == 0) delay(20);
 
 }
