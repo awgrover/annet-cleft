@@ -44,9 +44,12 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
 
+AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
+LimitSwitch* limit_switches = new LimitSwitch(MOTOR_CT);
+
 BeginRun* systems[] = {
-  new AccelStepperShift(MOTOR_CT, LATCH_PIN),
-  new LimitSwitch(MOTOR_CT)
+  stepper_shift,
+  limit_switches
 };
 
 void setup() {
@@ -78,6 +81,11 @@ void setup() {
     last_free = freeMemory();
   }
 
+  // tie some things together
+  stepper_shift->limit_switch = limit_switches->status;
+
+  stepper_shift->goto_limit();
+  
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
 }

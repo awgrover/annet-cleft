@@ -39,7 +39,10 @@ class AccelStepperNoted: public AccelStepper {
     inline boolean direction() {
       return _direction;  // expose, true == foward
     }
+
     boolean do_step; // true == do a step, reset after this is used
+    boolean at_limit = false; // triggered by limit_switch detection
+    int at_limit_pos = 0; // where the limit switch was last triggered
 
     AccelStepperNoted() : AccelStepper(&dumyStep, &dumyStep) , do_step(false) {}
     static void dumyStep() {}
@@ -95,11 +98,14 @@ class AccelStepperShift : public BeginRun {
   public:
     // per frame
     // invert if necessary
-    static byte constexpr FWD_DIRBIT = 0b10;
-    static byte constexpr REV_DIRBIT = 0b00;
-    static byte constexpr STEPBIT = 0b01;
+    static byte constexpr FWD_DIRBIT = 1 << 1;
+    static byte constexpr REV_DIRBIT = 0 << 1;
+    static byte constexpr STEPBIT = 1 << 0;
+    static byte constexpr NOT_STEPBIT = 0 << 0;
     static boolean constexpr LATCHSTART = 1; // 1 if the latch pulse is LOW->HIGH->LOW
     static boolean constexpr LATCHIDLE = ! LATCHSTART;
+    // depends on how far the CRASH_LIMIT steps actually is
+    static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
 
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
@@ -140,6 +146,11 @@ class AccelStepperShift : public BeginRun {
     // an [] of bytes for the shift-register bits, for per-motor-frame
     byte* dir_bit_vector = NULL; // dir & step=0 for each frame
     byte* step_bit_vector = NULL; // dir&step for each frame
+    // state of each limit switch, set after construct, optional
+    // somebody would need to supply this vector [motor_ct]
+    // and set an entry to true if a limit switch was on
+    // e.g. use the status[] from LimitSwitch class
+    boolean *limit_switch = NULL; // NULL means don't use
 
     AccelStepperShift(const int motor_ct, const int latch_pin)
       : motor_ct(motor_ct)
@@ -187,8 +198,6 @@ class AccelStepperShift : public BeginRun {
       memset(step_bit_vector, 0, sizeof(byte)*motor_ct);
       dir_bit_vector = new byte[byte_ct];
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
-
-      Serial << F("BEGIN AccelStepperShift: ") << endl;
 
       for (int i = 0; i < motor_ct; i++) {
         // to 200 steps/sec in 0.1 sec
@@ -246,6 +255,24 @@ class AccelStepperShift : public BeginRun {
       }
     }
 
+    inline void stop_at_limit(int motor_i) {
+      // limit switches are optional,
+      // moving up & hit it?
+      // this add about 50micros to the loop
+      const boolean hit_limit = limit_switch != NULL && motors[motor_i]->direction() && limit_switch[motor_i];
+      if (hit_limit) {
+        if ( ! motors[motor_i]->at_limit) { // and not already at limit
+
+          // flag that we are atlimit or above
+          // remember where we saw the switch
+          motors[motor_i]->at_limit = true;
+          motors[motor_i]->at_limit_pos = motors[motor_i]->currentPosition();
+        }
+        // and keep stopping
+        motors[motor_i]->stop(); // at current accel
+      }
+    }
+
     boolean run_all() {
       // run all
       // capture bit vector
@@ -256,6 +283,8 @@ class AccelStepperShift : public BeginRun {
 
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
+        stop_at_limit(i);
+
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
         if ( motors[i]->run() ) {
           done = false;
@@ -270,61 +299,77 @@ class AccelStepperShift : public BeginRun {
               << endl;
         }
 
-        if (motors[i]->do_step) {
-          // collect the bits
-          // about 100micros for all 15 at 8MHz 32u4
-
-          motors[i]->do_step = false; // reset once read
-
-          int frame_i = extra_frames + unused_frames ;
-          frame_i += i;
-
-          if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
-            Serial << F("BV motor[") << i << F("] ")
-                   << F(" extra ") << extra_frames << F(" unused ") << unused_frames << F(" = ") << (extra_frames + unused_frames)
-                   << F("| frame[") << frame_i << F("] ")
-                   << F(" direction ") << motors[i]->direction()
-                   << endl;
-            Serial << F("  mask 0b") << _BIN(frame_mask) << endl;
-            //while (1) delay(20);
-          }
-
-          // want the dir-bit, and !step
-          const byte dir_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | (~STEPBIT & used_mask));
-          // want the dir-bit AND step
-          const byte step_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | STEPBIT);
-
-          if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
-            Serial << "  new dir_bits " << _BIN(dir_bit) << endl;
-            Serial << "  new step_bits " << _BIN(step_bit) << endl;
-            //while (1) delay(20);
-          }
-
-          int byte_i = set_frame( dir_bit_vector, frame_i, frame_mask, dir_bit );
-          set_frame( step_bit_vector, frame_i, frame_mask, step_bit );
-
-          if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
-            Serial << F("  dir byte[") << byte_i << F("]= ") << _BIN(dir_bit_vector[ byte_i ]) << endl;
-            Serial << F("  step byte[") << byte_i << F("]= ") << _BIN(step_bit_vector[ byte_i ]) << endl;
-          }
-
-          // dump, then stop if debugging this motor
-          if (DEBUGLOGBITVECTOR == 1 || (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i)) {
-            for (int bi = byte_ct - 1; bi >= 0; bi--) {
-              Serial << F("      ") << F(" ") << (bi > 10 ? "" : " ") << bi << F(" ");
-            }
-            Serial << endl;
-
-            dump_bit_vectors();
-            if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i) while (1) delay(20);
-          }
-        }
+        collect_bit(i);
 
       }
       if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << endl;
       all_done = done;
 
       return ! done;
+    }
+
+    void collect_bit(int i) { // motor_i
+      // collect the bits
+      // about 100micros for all 15 at 8MHz 32u4
+
+      if (motors[i]->do_step) {
+
+        motors[i]->do_step = false; // reset once read
+
+        int frame_i = extra_frames + unused_frames ;
+        frame_i += i;
+
+        if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
+          Serial << F("BV motor[") << i << F("] ")
+                 << F(" extra ") << extra_frames << F(" unused ") << unused_frames << F(" = ") << (extra_frames + unused_frames)
+                 << F("| frame[") << frame_i << F("] ")
+                 << F(" direction ") << motors[i]->direction()
+                 << endl;
+          Serial << F("  mask 0b") << _BIN(frame_mask) << endl;
+          //while (1) delay(20);
+        }
+
+        // want the dir-bit, and !step
+        const byte dir_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | NOT_STEPBIT);
+
+        // ensure we don't go to far after limit
+        const boolean hit_limit_going_up = motors[i]->direction() && motors[i]->at_limit;
+
+        // This is instant stop.
+        const boolean allow_step = ! (
+                                     hit_limit_going_up
+                                     && (motors[i]->currentPosition() - motors[i]->at_limit_pos) >= CRASH_LIMIT
+                                   );
+        if (! allow_step) Serial << F("CRASH motor ") << i << endl;
+
+        // want the dir-bit AND step (unless limit-switch while going up)
+        const byte step_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | allow_step ? STEPBIT : NOT_STEPBIT);
+
+        if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
+          Serial << "  new dir_bits " << _BIN(dir_bit) << endl;
+          Serial << "  new step_bits " << _BIN(step_bit) << endl;
+          //while (1) delay(20);
+        }
+
+        int byte_i = set_frame( dir_bit_vector, frame_i, frame_mask, dir_bit );
+        set_frame( step_bit_vector, frame_i, frame_mask, step_bit );
+
+        if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
+          Serial << F("  dir byte[") << byte_i << F("]= ") << _BIN(dir_bit_vector[ byte_i ]) << endl;
+          Serial << F("  step byte[") << byte_i << F("]= ") << _BIN(step_bit_vector[ byte_i ]) << endl;
+        }
+
+        // dump, then stop if debugging this motor
+        if (DEBUGLOGBITVECTOR == 1 || (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i)) {
+          for (int bi = byte_ct - 1; bi >= 0; bi--) {
+            Serial << F("      ") << F(" ") << (bi > 10 ? "" : " ") << bi << F(" ");
+          }
+          Serial << endl;
+
+          dump_bit_vectors();
+          if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i) while (1) delay(20);
+        }
+      }
     }
 
     void dump_bit_vectors() {
@@ -382,6 +427,70 @@ class AccelStepperShift : public BeginRun {
       }
       bit_vector[ byte_i ] = ( bit_vector[ byte_i ] & ~(mask << offset) ) | (value << offset);
       return byte_i;
+    }
+
+    void goto_limit() {
+      // move all motors to the limit switch
+      if (! limit_switch) {
+        Serial << F("No limit switches, can't goto") << endl;
+        while (1);
+      }
+      Serial << F("Goto LIMITUP") << endl;
+
+      int distance;
+      Timer too_long(1);
+
+      distance = - (CRASH_LIMIT + CRASH_LIMIT / 2);
+      // move well below the limit switch
+      for (int i = 0; i < motor_ct; i++) {
+        motors[i]->move( distance );
+      }
+      too_long.reset(5000);
+      while (run() && ! too_long()) ;
+      if (too_long.after()) {
+        Serial << F("FAULT: too long to run ") << distance << endl;
+        while (1);
+      }
+
+      // move up till limit switch
+      distance = 24 * 200;
+      for (int i = 0; i < motor_ct; i++) {
+        motors[i]->move( distance ); // 24 revs should be about 2 meters
+      }
+      too_long.reset( 1000 * 2 * (distance / 200 ) ); // 2.5 secs / rev
+      while (run() && ! too_long()) ;
+      if (too_long.after()) {
+        Serial << F("FAULT: too long to run ") << distance << endl;
+        while (1);
+      }
+      boolean hit_limit = true;
+      for (int i = 0; i < motor_ct; i++) {
+        hit_limit &= motors[i]->at_limit;
+      }
+      if (!hit_limit) {
+        Serial << F("FAULT: didn't hit limit ") << distance << endl;
+        while (1);
+      }
+
+      // all motors at LIMITUP
+      // reset to 0 and cleanup
+      for (int i = 0; i < motor_ct; i++) {
+        long stopped_at = motors[i]->currentPosition();
+        motors[i]->setCurrentPosition( stopped_at - motors[i]->at_limit_pos );
+        motors[i]->at_limit_pos = 0; // nobody is relying on this going to 0
+        motors[i]->moveTo(- 2 * 200); // need to get below switch
+      }
+      too_long.reset( 1000);
+      while (run() && ! too_long()) ;
+      if (too_long.after()) {
+        Serial << F("FAULT: too long to runto ") << 0 << endl;
+        while (1);
+      }
+      for (int i = 0; i < motor_ct; i++) {
+        motors[i]->at_limit = false; // noone else is going to reset this! fixme...
+      }
+      
+      Serial << F("Ran to LIMITUP") << endl;
     }
 };
 

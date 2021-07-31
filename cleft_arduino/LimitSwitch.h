@@ -3,6 +3,13 @@
 #include "array_size.h"
 #include "every.h"
 
+// true to print out limit/unlimit messages
+#define DEBUGLIMIT 1
+
+#ifndef DEBUGLIMIT
+#define DEBUGLIMIT 0
+#endif
+
 class LimitSwitch : public BeginRun {
     // read & track all the limit switches
     // respond "immediately" to "on"
@@ -17,7 +24,6 @@ class LimitSwitch : public BeginRun {
     LimitSwitch(int ct) : count(ct) {}
 
     void begin() {
-      Serial << F("BEGIN LimitSwitch ") << count << endl;
       if (count > (int) array_size(pins)) {
         Serial << F("FAIL: limit of 15 pins for limit switches") << endl;
         while (1) ;
@@ -26,6 +32,12 @@ class LimitSwitch : public BeginRun {
       for (int i = 0; i < count; i++) {
         pinMode(pins[i], INPUT_PULLUP);
       }
+
+      Serial << F("BEGIN LimitSwitch ") << count << F(" pins ");
+      for (int i = 0; i < count; i++) {
+        Serial << pins[i] << F(" ");
+      }
+      Serial << endl;
 
       status = new boolean[count];
       debouncer = new Timer*[count];
@@ -39,12 +51,15 @@ class LimitSwitch : public BeginRun {
       if (check()) {
         // takes about 175micros for 15 at 8MHz on 32u4
         for (int i = 0; i < count; i++) {
-          int value = digitalRead( pins[i] ); // sooo slow. 10micros
+          int value = ! digitalRead( pins[i] ); // HIGH=open. sooo slow. 10micros
           if (value) {
-            if ( ! status[i] ) debouncer[i]->reset(); // debounce set
-            status[i] = true; // "instantly" true
-          }
-          else if ( debouncer[i]->after() ) {
+            if ( ! status[i] ) {
+              debouncer[i]->reset(); // debounce set
+              if (DEBUGLIMIT) Serial << F("LIMIT ") << i << endl;
+            }
+            status[i] = true; // "instantly" true            
+          } else if ( debouncer[i]->after() ) {
+            if (DEBUGLIMIT && status[i]) Serial << F("UNLIMIT ") << i << endl;
             status[i] = false;
           }
         }
@@ -52,6 +67,7 @@ class LimitSwitch : public BeginRun {
       return true; // doesn't really mean anything
     }
 };
+
 const int LimitSwitch::pins[15] = {   // should be MOTOR_CT
   // All should have interrupt
   // reserve: 5=vhi, 2/3=i2c, 13=builtinled
