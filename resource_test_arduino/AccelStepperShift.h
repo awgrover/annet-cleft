@@ -114,11 +114,14 @@ class AccelStepperShift {
     static constexpr byte frame_mask = (1 << bits_per_frame) - 1; // just the bits of the frame, i.e. n bits
     static constexpr byte used_mask = (1 << used_bits) - 1; // just the bits of the frame that are used, i.e. step & dir
 
+    // State
+    // NB: this MUST be in the same order as the initialization list of the constructor
+    // or values can get corrupted.
+    // Turn on "more" warnings in preferences.
+
     const int motor_ct;
     const int latch_pin;
-
     // derived
-    // NB: this MUST be in the same order as the initialization list of the constructor
     const int total_bits;
     const int byte_ct;
     const int unused_frames; // lsb frames that aren't used (because we need byte aligned)
@@ -186,7 +189,7 @@ class AccelStepperShift {
         // (targetspeed*2)/0.1
         constexpr int max_speed = 200;
         constexpr float time_to_max = 0.1;
-        constexpr int acceleration = (max_speed * 2)/time_to_max;
+        constexpr int acceleration = (max_speed * 2) / time_to_max;
         motors[i]->setAcceleration(acceleration);
         motors[i]->setMaxSpeed(max_speed); // might be limited by maximum loop speed
       }
@@ -337,14 +340,14 @@ class AccelStepperShift {
 
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
       SPI.beginTransaction(SPISettings(6000000, LSBFIRST, SPI_MODE0));
-       
+
       SPI.transfer(dir_bit_vector, motor_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       SPI.transfer(step_bit_vector, motor_ct);
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       SPI.transfer(dir_bit_vector, motor_ct); // this is "step pulse off"
-      
+
       SPI.endTransaction(); // "as soon as possible"
       // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
