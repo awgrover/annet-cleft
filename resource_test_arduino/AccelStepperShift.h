@@ -250,6 +250,8 @@ class AccelStepperShift {
       // run all
       // capture bit vector
       // return true if ANY ran (have to shift all bits)
+      // We should be overwriting the whole bit-vector buffer(s), all bits
+      
       static boolean all_done = false; // for debug messages
 
       boolean done = true;
@@ -267,7 +269,7 @@ class AccelStepperShift {
               << F("motor[") << i << F("] do_step? ") << motors[i]->do_step
               << endl;
         }
-        
+
         // collect the bits
         // about 100micros for all 15 at 8MHz 32u4
         if (motors[i]->do_step) {
@@ -275,7 +277,7 @@ class AccelStepperShift {
 
           int frame_i = extra_frames + unused_frames ;
           frame_i += i;
-          
+
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
             Serial << F("BV motor[") << i << F("] ")
                    << F(" extra ") << extra_frames << F(" unused ") << unused_frames << F(" = ") << (extra_frames + unused_frames)
@@ -285,12 +287,12 @@ class AccelStepperShift {
             Serial << F("  mask 0b") << _BIN(frame_mask) << endl;
             //while (1) delay(20);
           }
-          
+
           // want the dir-bit, and !step
           const byte dir_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | (~STEPBIT & used_mask));
           // want the dir-bit AND step
           const byte step_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | STEPBIT);
-          
+
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
             Serial << "  new dir_bits " << _BIN(dir_bit) << endl;
             Serial << "  new step_bits " << _BIN(step_bit) << endl;
@@ -320,7 +322,7 @@ class AccelStepperShift {
       }
       if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << endl;
       all_done = done;
-      
+
       return ! done;
     }
 
@@ -340,7 +342,8 @@ class AccelStepperShift {
     }
 
     void shift_out() {
-      // Send bits, nb, dir_bit_vector & step_bit_vector get overwritten
+      // Send bits,
+      // (NB: dir_bit_vector & step_bit_vector get overwritten)
       // each is about 60micros at 4MHz spi
       // at least 2.2micros pulse durations, and each takes 60, so ok
       // SPI.transfer(byte []) overwrites the byte[] buffer,
@@ -368,7 +371,7 @@ class AccelStepperShift {
     inline int set_frame( byte * bit_vector, int frame_i, byte mask, byte value ) {
       // In the bit_vector
       // at the [frame_i] (lsb)
-      // set the bits in `value`, masked by `mask`
+      // update the bits in `value`, masked by `mask`
       // returns the byte_i
       const int byte_i = (frame_i * bits_per_frame ) / (sizeof(byte) * 8);
       const int offset = (frame_i * bits_per_frame ) % 8;
