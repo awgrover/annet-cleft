@@ -106,7 +106,10 @@ class AccelStepperShift : public BeginRun {
     static boolean constexpr LATCHIDLE = ! LATCHSTART;
     // depends on how far the CRASH_LIMIT steps actually is
     static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
-
+    static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
+    static float constexpr MAX_MOTION = 0.5; // meters fixme: measure
+    static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
+     
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
     // We shift out LSB 1st,
@@ -451,7 +454,8 @@ class AccelStepperShift : public BeginRun {
         Serial << F("FAULT: too long to run ") << distance << endl;
         while (1);
       }
-
+      Serial << F("FIXME NOT LIMITING") << endl;
+      /*
       // move up till limit switch
       distance = 24 * 200;
       for (int i = 0; i < motor_ct; i++) {
@@ -486,8 +490,10 @@ class AccelStepperShift : public BeginRun {
         Serial << F("FAULT: too long to runto ") << 0 << endl;
         while (1);
       }
+      */
       for (int i = 0; i < motor_ct; i++) {
         motors[i]->at_limit = false; // noone else is going to reset this! fixme...
+        motors[i]->moveTo( HOME );
       }
       
       Serial << F("Ran to LIMITUP") << endl;
