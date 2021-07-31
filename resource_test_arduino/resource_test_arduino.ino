@@ -36,7 +36,7 @@ constexpr int LATCH_PIN = LED_BUILTIN;
 #include "motor_bits.h"
 #include "spi_shift.h"
 #include "limit_switch.h"
-#include "AccelStepperShift.h"
+#include "accel_shift_beastie.h"
 
 Every say_status(300);
 
@@ -47,7 +47,7 @@ Beastie *beast[] = {
   //new MotorBits(),
   //new SPI_Shift(),
   //new LimitSwitch(),
-  new AccelStepperShift(MOTOR_CT, LATCH_PIN)
+  new AccelShiftBeastie(MOTOR_CT, LATCH_PIN),
 };
 
 void setup() {

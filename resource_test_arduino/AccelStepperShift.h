@@ -47,7 +47,7 @@ class AccelStepperNoted: public AccelStepper {
     }
 } ;
 
-class AccelStepperShift : public Beastie {
+class AccelStepperShift {
     // for many DFRobot TB6600
     // via a chain of shift-registers (2 bits per tb6600, common enable)
     //  74HC595
@@ -142,7 +142,7 @@ class AccelStepperShift : public Beastie {
       // not constructing `new` members till .begin()
     }
 
-    void setup() {
+    void begin() {
       pinMode(latch_pin, OUTPUT);
       digitalWrite(latch_pin, LATCHIDLE);
 
@@ -175,9 +175,7 @@ class AccelStepperShift : public Beastie {
       memset(step_bit_vector, 0, sizeof(byte)*motor_ct);
       dir_bit_vector = new byte[byte_ct];
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
-    }
 
-    void begin() {
       // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift: ") << endl;
 
@@ -190,20 +188,20 @@ class AccelStepperShift : public Beastie {
         constexpr int acceleration = (max_speed * 2)/time_to_max;
         motors[i]->setAcceleration(acceleration);
         motors[i]->setMaxSpeed(max_speed); // might be limited by maximum loop speed
-        motors[i]->moveTo(300);
       }
 
-      // setup SPI
+      // setup SPI. not nice. should be global in main setup()
       SPI.begin();
     }
 
-    void loop() {
+    boolean run() {
 
-      if ( run() ) {
+      if ( run_all() ) {
         set_led_bar();
         shift_out();
+        return true;
       }
-
+      return false;
     }
 
     void set_led_bar() {
@@ -237,7 +235,7 @@ class AccelStepperShift : public Beastie {
       }
     }
 
-    boolean run() {
+    boolean run_all() {
       // run all
       static boolean all_done = false;
 
