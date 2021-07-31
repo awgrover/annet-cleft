@@ -9,6 +9,10 @@
 #include "freememory.h"
 #include "every.h"
 
+// true to print "done" everytime all motors finish
+// probably too noisy when running a real pattern
+#define DEBUGDONERUN 1
+
 // the COUNT of motors to debug.
 //  undef or -1 is don't,
 //#define DEBUGBITVECTOR 1
@@ -16,6 +20,9 @@
 // 2 to print on "blink"
 //#define DEBUGLOGBITVECTOR 2
 
+#ifndef DEBUGDONERUN
+#define DEBUGDONERUN 0
+#endif
 #ifndef DEBUGBITVECTOR
 #define DEBUGBITVECTOR -1
 #endif
@@ -154,6 +161,7 @@ class AccelStepperShift {
       Serial << F("SETUP AccelStepperShift ") << motor_ct
              << F(" bit_vector bytes ") << byte_ct << F(" bits ") << total_bits << F(" unused frames ") << unused_frames
              << endl;
+      // I was getting corrupted data because initialization-list must be in same order as instance-vars.
       if ( unused_frames != (byte_ct - (total_bits  / ((int)sizeof(byte) * 8) ))) {
         Serial << F("Bad unused_frames again! free ") << freeMemory() << endl;
         while (1) delay(20);
@@ -180,7 +188,6 @@ class AccelStepperShift {
       dir_bit_vector = new byte[byte_ct];
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
 
-      // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift: ") << endl;
 
       for (int i = 0; i < motor_ct; i++) {
@@ -199,7 +206,6 @@ class AccelStepperShift {
     }
 
     boolean run() {
-
       if ( run_all() ) {
         set_led_bar();
         shift_out();
@@ -209,9 +215,10 @@ class AccelStepperShift {
     }
 
     void set_led_bar() {
-      static Every::Toggle shift_blink(100);
-
       // use led-bar to indicate that we are shifting, i.e. running
+
+      static Every::Toggle shift_blink(100); // "blink" one of the leds
+
       byte dir_bit = 0;
       byte step_bit = 0;
       // last bit always on: "running"
@@ -241,7 +248,9 @@ class AccelStepperShift {
 
     boolean run_all() {
       // run all
-      static boolean all_done = false;
+      // capture bit vector
+      // return true if ANY ran (have to shift all bits)
+      static boolean all_done = false; // for debug messages
 
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
@@ -258,6 +267,7 @@ class AccelStepperShift {
               << F("motor[") << i << F("] do_step? ") << motors[i]->do_step
               << endl;
         }
+        
         // collect the bits
         // about 100micros for all 15 at 8MHz 32u4
         if (motors[i]->do_step) {
@@ -265,35 +275,37 @@ class AccelStepperShift {
 
           int frame_i = extra_frames + unused_frames ;
           frame_i += i;
-          const byte mask = frame_mask; // just our bits
+          
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
             Serial << F("BV motor[") << i << F("] ")
                    << F(" extra ") << extra_frames << F(" unused ") << unused_frames << F(" = ") << (extra_frames + unused_frames)
                    << F("| frame[") << frame_i << F("] ")
                    << F(" direction ") << motors[i]->direction()
                    << endl;
-            Serial << F("  mask 0b") << _BIN(mask) << endl;
+            Serial << F("  mask 0b") << _BIN(frame_mask) << endl;
             //while (1) delay(20);
           }
+          
           // want the dir-bit, and !step
           const byte dir_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | (~STEPBIT & used_mask));
           // want the dir-bit AND step
           const byte step_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | STEPBIT);
+          
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
             Serial << "  new dir_bits " << _BIN(dir_bit) << endl;
             Serial << "  new step_bits " << _BIN(step_bit) << endl;
             //while (1) delay(20);
           }
 
-          int byte_i = set_frame( dir_bit_vector, frame_i, mask, dir_bit );
-          set_frame( step_bit_vector, frame_i, mask, step_bit );
+          int byte_i = set_frame( dir_bit_vector, frame_i, frame_mask, dir_bit );
+          set_frame( step_bit_vector, frame_i, frame_mask, step_bit );
 
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
             Serial << F("  dir byte[") << byte_i << F("]= ") << _BIN(dir_bit_vector[ byte_i ]) << endl;
             Serial << F("  step byte[") << byte_i << F("]= ") << _BIN(step_bit_vector[ byte_i ]) << endl;
           }
 
-          // stop if debugging this motor
+          // dump, then stop if debugging this motor
           if (DEBUGLOGBITVECTOR == 1 || (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i)) {
             for (int bi = byte_ct - 1; bi >= 0; bi--) {
               Serial << F("      ") << F(" ") << (bi > 10 ? "" : " ") << bi << F(" ");
@@ -302,14 +314,14 @@ class AccelStepperShift {
 
             dump_bit_vectors();
             if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i) while (1) delay(20);
-
           }
         }
 
       }
-      if (!all_done && done) Serial << F("All done @ ") << millis() << endl;
+      if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << endl;
       all_done = done;
-      return ! all_done;
+      
+      return ! done;
     }
 
     void dump_bit_vectors() {
