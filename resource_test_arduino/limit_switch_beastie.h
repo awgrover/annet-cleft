@@ -4,7 +4,6 @@ class LimitSwitchBeastie : public Beastie {
     // show memory and time used by all limit switches
 
   public:
-    // reserve: 5=vhi, 2/3=i2c, 13=builtinled
     static int pins[15];
     
 
@@ -28,8 +27,11 @@ class LimitSwitchBeastie : public Beastie {
     }
 };
 int LimitSwitchBeastie::pins[15] = {   // should be MOTOR_CT
-      0, 1, 7, 9, 10,
-      11, 12, 6, A0, A1,
-      A2, A3, A4, A5, 4
-      // 8 unused
+      // reserve: 5=vhi, 2/3=i2c, 13=builtinled
+      // 4 has no interrupt
+
+      0, 1, 6, 7, 8, 
+      9, 10,11, 12, A0, 
+      A1,A2, A3, A4, A5
+      // #4 unused
     };

@@ -7,6 +7,7 @@
 
 #include "freememory.h"
 #include "every.h"
+#include "begin_run.h"
 
 // true to print "done" everytime all motors finish
 // probably too noisy when running a real pattern
@@ -53,7 +54,7 @@ class AccelStepperNoted: public AccelStepper {
     }
 } ;
 
-class AccelStepperShift {
+class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
     // via a chain of shift-registers (2 bits per tb6600, 2 bits unused, common enable)
     //  74HC595
@@ -157,7 +158,7 @@ class AccelStepperShift {
       digitalWrite(latch_pin, LATCHIDLE);
 
       // construct now, so we can control when memory is allocated
-      Serial << F("SETUP AccelStepperShift ") << motor_ct
+      Serial << F("BEGIN AccelStepperShift ") << motor_ct
              << F(" bit_vector bytes ") << byte_ct << F(" bits ") << total_bits << F(" unused frames ") << unused_frames
              << endl;
       // I was getting corrupted data because initialization-list must be in same order as instance-vars.
@@ -272,7 +273,7 @@ class AccelStepperShift {
         if (motors[i]->do_step) {
           // collect the bits
           // about 100micros for all 15 at 8MHz 32u4
-          
+
           motors[i]->do_step = false; // reset once read
 
           int frame_i = extra_frames + unused_frames ;

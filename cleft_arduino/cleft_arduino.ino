@@ -39,11 +39,15 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "every.h"
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
+#include "LimitSwitch.h"
 
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
 
-AccelStepperShift* motor_system; // holds AccelSteppers, bit-vector, and shift-out code
+BeginRun* systems[] = {
+  new AccelStepperShift(MOTOR_CT, LATCH_PIN),
+  new LimitSwitch(MOTOR_CT)
+};
 
 void setup() {
   // Integrated USB chips have trouble uploading sometimes
@@ -66,18 +70,13 @@ void setup() {
 
   // Each main object
   // We `new` them so we can more easily see memory usage in console
-
-  motor_system = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
-  Serial << F("AccelStepperShift") << endl;
-  Serial << F("  new")
-         << F(" free ") << freeMemory()
-         << F(" used ") << (last_free - freeMemory()) << endl;
   last_free = freeMemory();
-  motor_system->begin();
-  Serial << F("  begin")
-         << F(" free ") << freeMemory()
-         << F(" used ") << (last_free - freeMemory()) << endl;
-  last_free = freeMemory();
+  for (BeginRun* a_system : systems) {
+    a_system->begin();
+    Serial << F(" free ") << freeMemory()
+           << F(" used ") << (last_free - freeMemory()) << endl;
+    last_free = freeMemory();
+  }
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
@@ -89,6 +88,11 @@ void loop() {
   static ExponentialSmooth<unsigned long> elapsed(5);
   static unsigned long last_elapsed = 0;
   const unsigned long last_micros = micros(); // top of loop
+
+  // Run each object/module/system
+  for (BeginRun* a_system : systems) {
+    a_system->run();
+  }
 
   // keep track of loop time, and output status every so often
   // but only if it changes (less noisy)
