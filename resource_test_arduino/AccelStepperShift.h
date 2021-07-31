@@ -150,7 +150,7 @@ class AccelStepperShift : public Beastie {
       Serial << F("SETUP AccelStepperShift ") << motor_ct
              << F(" bit_vector bytes ") << byte_ct << F(" bits ") << total_bits << F(" unused frames ") << unused_frames
              << endl;
-      if ( unused_frames != (byte_ct - (total_bits  / (sizeof(byte) * 8) ))) {
+      if ( unused_frames != (byte_ct - (total_bits  / ((int)sizeof(byte) * 8) ))) {
         Serial << F("Bad unused_frames again! free ") << freeMemory() << endl;
         while (1) delay(20);
       }
@@ -182,8 +182,14 @@ class AccelStepperShift : public Beastie {
       Serial << F("BEGIN AccelStepperShift: ") << endl;
 
       for (int i = 0; i < motor_ct; i++) {
-        motors[i]->setAcceleration(1000);
-        motors[i]->setMaxSpeed(200); // really, 1/~60micros
+        // to 200 steps/sec in 0.1 sec
+        // targetspeed = 1/2 * A * 0.1
+        // (targetspeed*2)/0.1
+        constexpr int max_speed = 200;
+        constexpr float time_to_max = 0.1;
+        constexpr int acceleration = (max_speed * 2)/time_to_max;
+        motors[i]->setAcceleration(acceleration);
+        motors[i]->setMaxSpeed(max_speed); // might be limited by maximum loop speed
         motors[i]->moveTo(300);
       }
 
