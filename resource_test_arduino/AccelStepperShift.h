@@ -251,7 +251,7 @@ class AccelStepperShift {
       // capture bit vector
       // return true if ANY ran (have to shift all bits)
       // We should be overwriting the whole bit-vector buffer(s), all bits
-      
+
       static boolean all_done = false; // for debug messages
 
       boolean done = true;
@@ -270,9 +270,10 @@ class AccelStepperShift {
               << endl;
         }
 
-        // collect the bits
-        // about 100micros for all 15 at 8MHz 32u4
         if (motors[i]->do_step) {
+          // collect the bits
+          // about 100micros for all 15 at 8MHz 32u4
+          
           motors[i]->do_step = false; // reset once read
 
           int frame_i = extra_frames + unused_frames ;
@@ -327,6 +328,7 @@ class AccelStepperShift {
     }
 
     void dump_bit_vectors() {
+      // just for debug print
       byte* twobvs[2] = { dir_bit_vector, step_bit_vector };
       for (byte* bv : twobvs) {
         for (int bi = byte_ct - 1; bi >= 0; bi--) {
@@ -371,7 +373,7 @@ class AccelStepperShift {
     inline int set_frame( byte * bit_vector, int frame_i, byte mask, byte value ) {
       // In the bit_vector
       // at the [frame_i] (lsb)
-      // update the bits in `value`, masked by `mask`
+      // update the bits to `value`, masked by `mask`
       // returns the byte_i
       const int byte_i = (frame_i * bits_per_frame ) / (sizeof(byte) * 8);
       const int offset = (frame_i * bits_per_frame ) % 8;
