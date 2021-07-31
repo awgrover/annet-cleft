@@ -189,9 +189,6 @@ class AccelStepperShift : public Beastie {
 
       // setup SPI
       SPI.begin();
-      SPI.setClockDivider(SPI_CLOCK_DIV8); // change to <10MHz
-      SPI.setBitOrder(LSBFIRST);
-      SPI.setDataMode(SPI_MODE0);
     }
 
     void loop() {
@@ -245,7 +242,7 @@ class AccelStepperShift : public Beastie {
           done = false;
         }
         else {
-          if (!all_done) Serial << F("  done ") << i << endl;
+          // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
         }
 
         if (false && DEBUGBITVECTOR > 0 && DEBUGBITVECTOR <= i && !all_done) {
@@ -302,7 +299,7 @@ class AccelStepperShift : public Beastie {
         }
 
       }
-      if (!all_done && done) Serial << F("done @ ") << millis() << endl;
+      if (!all_done && done) Serial << F("All done @ ") << millis() << endl;
       all_done = done;
       return ! all_done;
     }
@@ -333,12 +330,18 @@ class AccelStepperShift : public Beastie {
       byte dir_copy[byte_ct];
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
 
+      // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
+      SPI.beginTransaction(SPISettings(6000000, LSBFIRST, SPI_MODE0));
+       
       SPI.transfer(dir_bit_vector, motor_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       SPI.transfer(step_bit_vector, motor_ct);
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       SPI.transfer(dir_bit_vector, motor_ct); // this is "step pulse off"
+      
+      SPI.endTransaction(); // "as soon as possible"
+      // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
     }
 
