@@ -26,6 +26,7 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 }
 
 constexpr int MOTOR_CT = 15;
+constexpr int LATCH_PIN = LED_BUILTIN;
 
 // NB: a #include list is auto-generated of extant .h files
 //  and it is alphabetical, so this order is not relevant
@@ -46,7 +47,7 @@ Beastie *beast[] = {
   //new MotorBits(),
   //new SPI_Shift(),
   //new LimitSwitch(),
-  new AccelStepperShift(MOTOR_CT)
+  new AccelStepperShift(MOTOR_CT, LATCH_PIN)
 };
 
 void setup() {
@@ -84,7 +85,7 @@ void setup() {
     last_free = freeMemory();
   }
 
-  Serial << F("Before LOOP ") << freeMemory() << endl;
+  Serial << F("Before LOOP @ ") << millis() << F(" Free: ") << freeMemory() << endl;
 }
 
 void loop() {

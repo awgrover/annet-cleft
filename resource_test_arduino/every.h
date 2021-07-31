@@ -35,7 +35,7 @@
   * Toggle every n millis
 
     // "blink" example using EveryToggle
-    EveryToggle t1(200); // adds the .state() method
+    Every::Toggle t1(200); // adds the .state() method
     void setup() { pinMode(LED_BUILTIN, OUTPUT); }
 
     void loop() {
