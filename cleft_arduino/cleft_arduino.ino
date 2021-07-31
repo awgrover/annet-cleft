@@ -36,6 +36,8 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 //  and it is alphabetical, so this order is not relevant
 //  and, in fact, is redundant for arduino-ide
 #include "freememory.h"
+#include "every.h"
+#include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
 
 constexpr int MOTOR_CT = 15;
@@ -58,11 +60,12 @@ void setup() {
 
   Serial.begin(115200); while (!Serial) {}
   Serial << endl;
-  Serial << F("Base ") << base_memory << endl;
+  Serial << F("Start free ") << base_memory << endl;
   Serial << F("After Serial.begin ") << freeMemory() << endl;
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
 
   // Each main object
+  // We `new` them so we can more easily see memory usage in console
 
   motor_system = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
   Serial << F("AccelStepperShift") << endl;
@@ -75,10 +78,29 @@ void setup() {
          << F(" free ") << freeMemory()
          << F(" used ") << (last_free - freeMemory()) << endl;
   last_free = freeMemory();
+
+  // and
+  Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
 }
 
 void loop() {
-  delay(20);
+  // track loop time (in microseconds)
+  static Every say_status(1000);
+  static ExponentialSmooth<unsigned long> elapsed(5);
+  static unsigned long last_elapsed = 0;
+  const unsigned long last_micros = micros(); // top of loop
+
+  // keep track of loop time, and output status every so often
+  // but only if it changes (less noisy)
+  const unsigned long now = micros();
+  const unsigned long elapsed_micros = now - last_micros;
+  if (elapsed_micros < 200ul) delayMicroseconds(200); // ensure usb can notice upload
+  elapsed.average( elapsed_micros  );
+
+  if ( say_status() && last_elapsed != elapsed.value() ) {
+    Serial << F("Loop ") << elapsed.value() << " free " << freeMemory() << endl;
+    last_elapsed = elapsed.value();
+  }
 }
 
 /*
