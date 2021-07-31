@@ -49,7 +49,7 @@ class AccelStepperNoted: public AccelStepper {
 
 class AccelStepperShift {
     // for many DFRobot TB6600
-    // via a chain of shift-registers (2 bits per tb6600, common enable)
+    // via a chain of shift-registers (2 bits per tb6600, 2 bits unused, common enable)
     //  74HC595
     //  Wiring: Arduino   Shift-Register
     //                    VCC 3V
@@ -65,7 +65,7 @@ class AccelStepperShift {
     //
     // This class
     // * constructs AccelStepperNoted per motor
-    // * has several of the runX() methods to run all motors
+    // * has run() to run all motors
     // * converts the "noted" steps into bit-vectors for fast spi-shift out
     //    to drive the tb6600's
 
@@ -83,10 +83,11 @@ class AccelStepperShift {
     //  set pulse ~20micros
     //  2.2micros
     //  reset pulse ~20micros
-    //  total ~60microsec (later test shows about 333micros/motor)
+    //  total ~60microsec
 
   public:
     // per frame
+    // invert if necessary
     static byte constexpr FWD_DIRBIT = 0b10;
     static byte constexpr REV_DIRBIT = 0b00;
     static byte constexpr STEPBIT = 0b01;
@@ -96,15 +97,15 @@ class AccelStepperShift {
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
     // We shift out LSB 1st,
-    // so our bit-vector[0] is the first shifted out (farthest shift-register)
-    // and shift-register[i].bit[7] is our frame-bit[0]
+    // so our bit-vector[0] is the first shifted out (farthest shift-register. lsb)
+    // and shift-register[i].bit[7] is our frame-bit[0] ?
     // so,
     //  arduino
     //  -> ...
-    //  -> sr[-2]=motor[motor_ct-2]:motor[motor_ct-1]
-    //  -> sr[-1]=extra_frame[1]:extra_frame[0]
+    //  -> motor[1]:motor[0]
+    //  -> extra_frame[1]:extra_frame[0]
     //    led-bar goes here
-    //  -> sr[byte_ct]=unused_frame[1]:unused_frame[0]
+    //  -> unused_frame[1]:unused_frame[0]... if any
     //  end-of-chain
     static constexpr int bits_per_frame = 4; // dir-,pul-, 2 unused ("en" is common)
     static constexpr int extra_frames = 8 / bits_per_frame; // the led-bar: 8 leds
