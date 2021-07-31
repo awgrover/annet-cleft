@@ -27,7 +27,7 @@ class LimitSwitch : public Beastie {
       }
     }
 };
-int LimitSwitch::pins[15] = {   // should be 15
+int LimitSwitch::pins[15] = {   // should be MOTOR_CT
       0, 1, 7, 9, 10,
       11, 12, 6, A0, A1,
       A2, A3, A4, A5, 4
