@@ -1,22 +1,23 @@
 #pragma once
 
-class AccelBeastie : public Beastie {
-  // show memory and time used by all AccelStepper
-  
+#include "begin_run.h"
+
+class AccelBeastie : public BeginRun {
+    // show memory and time used by all AccelStepper
+
   public:
     static void dummyStep() {}; // not actually used, see new AccelStepper
 
     AccelStepper* motors[MOTOR_CT];
 
-    void setup() {
+    void begin() {
+      Serial << F("SETUP AccelSteppers: ") << endl;
+
       for (int i = 0; i < MOTOR_CT; i++) {
         // no pin use
         motors[i] = new AccelStepper(&dummyStep, &dummyStep);
       }
-      Serial << F("SETUP AccelSteppers: ") << endl;
-    }
 
-    void begin() {
       for (AccelStepper* m : motors) {
         m->setAcceleration(1000);
         m->setMaxSpeed(100);
@@ -27,7 +28,7 @@ class AccelBeastie : public Beastie {
     void loop() {
       static boolean all_done = false;
 
-      int done_ct=0;
+      int done_ct = 0;
       int i = 0;
       for (AccelStepper* m : motors) {
         if ( ! m->run() ) {

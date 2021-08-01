@@ -31,7 +31,7 @@ constexpr int LATCH_PIN = LED_BUILTIN;
 // NB: a #include list is auto-generated of extant .h files
 //  and it is alphabetical, so this order is not relevant
 //  and, in fact, is redundant for arduino-ide
-#include "beasties.h"
+#include "begin_run.h"
 #include "accel_beastie.h"
 #include "motor_bits.h"
 #include "spi_shift.h"
@@ -40,14 +40,14 @@ constexpr int LATCH_PIN = LED_BUILTIN;
 
 Every say_status(300);
 
-Beastie *beast[] = {
+BeginRun *beast[] = {
   // individually test by commenting out all but one
   //new NoopBeastie() //, // for null loop timing
   //new AccelBeastie(),
   //new MotorBits(),
-  //new SPI_Shift(),
+  new SPI_Shift(),
   //new LimitSwitchBeastie(),
-  new AccelShiftBeastie(MOTOR_CT, LATCH_PIN),
+  //new AccelShiftBeastie(MOTOR_CT, LATCH_PIN),
 };
 
 void setup() {
@@ -66,17 +66,9 @@ void setup() {
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
 
   int i = 0;
-  for (Beastie* b : beast) {
-    b->setup();
-    int freem = freeMemory();
-    Serial << F("SETUP [") << i << F("] ") << freeMemory()
-           << F(" used ") << (last_free - freem) << endl;
-    i++;
-    last_free = freeMemory();
-  }
 
   i = 0;
-  for (Beastie* b : beast) {
+  for (BeginRun* b : beast) {
     b->begin();
     int freem = freeMemory();
     Serial << F("BEGIN [") << i << F("] ") << freeMemory()
@@ -92,8 +84,8 @@ void loop() {
   unsigned long last_micros = micros();
   static ExponentialSmooth<unsigned long> elapsed(5);
 
-  for (Beastie* b : beast) {
-    b->loop();
+  for (BeginRun* b : beast) {
+    b->run();
   }
 
   unsigned long now = micros();
