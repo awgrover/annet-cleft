@@ -6,10 +6,18 @@ code and design
 
 Various arduino projects in arduino/
 
-The projects share several files, in common/.
+The projects share several files. Unfortunately, Windows doesn't do relative-shortcuts, and you need privileges for NTFS-links.
 
-* keep it next to the projects
-* there should be a link/shortcut to it from the projects that need it.
+Thus, the same file appears to be repeated in the arduino/ projects. But, it is supposed to be the same file.
+
+Requiring installation of a library for our common files is a complication (and synchronization issue).
+
+So:
+* Manually keep files identical
+* The files are arduino/*/*.h, that appear in more than 1 directory.
+* If you edit one of those, you'll need to copy it to the other places (and make sure they still work there).
+* Bummer.
+* If you are on linux, you can run: `make`. It hard-links files that are identical, which is how I do it on my development system.
 
 ## cleft/
 
