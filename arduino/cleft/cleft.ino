@@ -44,12 +44,20 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
 
+// SYSTEMS
+// We run them via systems[] (below)
+// We need to explicitly refer to a few, so need explicit name
+// When testing/developing, you can set these to NULL to skip using them
 AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
 LimitSwitch* limit_switches = new LimitSwitch(MOTOR_CT);
 
+// We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
+// When testing/developing, you can set these to NULL to skip using them
 BeginRun* systems[] = {
-  stepper_shift,
-  limit_switches
+  // all null: 9micros @ 8MHz 32u4
+  stepper_shift,  // 350micros @ 8MHz 32u4 1164 bytes used
+                  // plus about 60 for testing limit_switches
+  limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
 };
 
 void setup() {
@@ -75,6 +83,8 @@ void setup() {
   // We `new` them so we can more easily see memory usage in console
   last_free = freeMemory();
   for (BeginRun* a_system : systems) {
+    if (! a_system) continue; // skip NULLs
+
     a_system->begin();
     Serial << F(" free ") << freeMemory()
            << F(" used ") << (last_free - freeMemory()) << endl;
@@ -82,10 +92,12 @@ void setup() {
   }
 
   // tie some things together
-  stepper_shift->limit_switch = limit_switches->status;
+  if (stepper_shift && limit_switches) stepper_shift->limit_switch = limit_switches->status;
 
-  stepper_shift->goto_limit();
+  // other startup behavior
   
+  if (stepper_shift) stepper_shift->goto_limit();
+
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
 }
@@ -99,6 +111,8 @@ void loop() {
 
   // Run each object/module/system
   for (BeginRun* a_system : systems) {
+    if (! a_system) continue; // skip NULLs
+
     a_system->run();
   }
 

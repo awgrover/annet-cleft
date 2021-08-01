@@ -434,9 +434,11 @@ class AccelStepperShift : public BeginRun {
 
     void goto_limit() {
       // move all motors to the limit switch
+      // skip this if no limit switches
+      
       if (! limit_switch) {
         Serial << F("No limit switches, can't goto") << endl;
-        while (1);
+        return;
       }
       Serial << F("Goto LIMITUP") << endl;
 
