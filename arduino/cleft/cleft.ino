@@ -57,7 +57,7 @@ AnimationWave1* animation = new AnimationWave1( // moving sine wave
   stepper_shift,
   0.15, // amplitude meters
   0.5, // wavelength fraction that fits in 1/2 of cleft
-  4.0, // frequency
+  0.25, // frequency
   1 // cycles
 );
 

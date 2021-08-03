@@ -109,7 +109,7 @@ class AccelStepperShift : public BeginRun {
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
     static float constexpr MAX_MOTION = 0.5; // meters fixme: measure
     static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
-     
+
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
     // We shift out LSB 1st,
@@ -290,6 +290,8 @@ class AccelStepperShift : public BeginRun {
 
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
         if ( motors[i]->run() ) {
+          Serial << F("P ") << i << motors[i]->currentPosition() << endl;
+
           done = false;
         }
         else {
@@ -435,7 +437,7 @@ class AccelStepperShift : public BeginRun {
     void goto_limit() {
       // move all motors to the limit switch
       // skip this if no limit switches
-      
+
       if (! limit_switch) {
         Serial << F("No limit switches, can't goto") << endl;
         return;
@@ -458,46 +460,46 @@ class AccelStepperShift : public BeginRun {
       }
       Serial << F("FIXME NOT LIMITING") << endl;
       /*
-      // move up till limit switch
-      distance = 24 * 200;
-      for (int i = 0; i < motor_ct; i++) {
+        // move up till limit switch
+        distance = 24 * 200;
+        for (int i = 0; i < motor_ct; i++) {
         motors[i]->move( distance ); // 24 revs should be about 2 meters
-      }
-      too_long.reset( 1000 * 2 * (distance / 200 ) ); // 2.5 secs / rev
-      while (run() && ! too_long()) ;
-      if (too_long.after()) {
+        }
+        too_long.reset( 1000 * 2 * (distance / 200 ) ); // 2.5 secs / rev
+        while (run() && ! too_long()) ;
+        if (too_long.after()) {
         Serial << F("FAULT: too long to run ") << distance << endl;
         while (1);
-      }
-      boolean hit_limit = true;
-      for (int i = 0; i < motor_ct; i++) {
+        }
+        boolean hit_limit = true;
+        for (int i = 0; i < motor_ct; i++) {
         hit_limit &= motors[i]->at_limit;
-      }
-      if (!hit_limit) {
+        }
+        if (!hit_limit) {
         Serial << F("FAULT: didn't hit limit ") << distance << endl;
         while (1);
-      }
+        }
 
-      // all motors at LIMITUP
-      // reset to 0 and cleanup
-      for (int i = 0; i < motor_ct; i++) {
+        // all motors at LIMITUP
+        // reset to 0 and cleanup
+        for (int i = 0; i < motor_ct; i++) {
         long stopped_at = motors[i]->currentPosition();
         motors[i]->setCurrentPosition( stopped_at - motors[i]->at_limit_pos );
         motors[i]->at_limit_pos = 0; // nobody is relying on this going to 0
         motors[i]->moveTo(- 2 * 200); // need to get below switch
-      }
-      too_long.reset( 1000);
-      while (run() && ! too_long()) ;
-      if (too_long.after()) {
+        }
+        too_long.reset( 1000);
+        while (run() && ! too_long()) ;
+        if (too_long.after()) {
         Serial << F("FAULT: too long to runto ") << 0 << endl;
         while (1);
-      }
+        }
       */
       for (int i = 0; i < motor_ct; i++) {
         motors[i]->at_limit = false; // noone else is going to reset this! fixme...
         motors[i]->moveTo( HOME );
       }
-      
+
       Serial << F("Ran to LIMITUP") << endl;
     }
 };

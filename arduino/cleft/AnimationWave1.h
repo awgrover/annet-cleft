@@ -31,14 +31,40 @@ class AnimationWave1  : public BeginRun {
         phase_delay( ((1.0 / frequency) / 2 / half_segments) * 1000 ), // 1/2 a cycle for each segment (of 1/2 of the whole)
         total_cycles(total_cycles)
     {
-      // this should be State "Start"
+    }
+
+    void restart() {
+      state = Starting;
+      Serial << F("AW start") << endl;
+
       // FIXME: each motor, set maxspeed and accel to achieve frequency for amplitude
+
+      float cycle_length = 1.0 / frequency; // seconds per cycle
+      int distance = 2 * amplitude; // how far we'll need to move
+      // we'll accel half the distance, then decel half
+      // 1/2 at^2 = distance
+      float time = (cycle_length / 2);
+      int accel = (2 * distance) / (time * time); // steps per sec
+      int speed = accel * time; // final speed
+
+      for (int i = 0; i < half_segments; i++) {
+        all_motors->motors[i]->setMaxSpeed(speed);
+        all_motors->motors[i]->setAcceleration(accel);
+      }
+
+      Serial << F("Cycle length secs ") << cycle_length << endl
+             << F("Distance ") << distance << endl
+             << F("Accel time secs ") << time << endl
+             << F("accel steps/sec ") << accel << endl
+             << F("maxspeed steps/sec ") << speed << endl
+             ;
+
       start_next_phase.reset(phase_delay, true); // we intend to start running immediately, so start phase stuff immed
       cycles = 0;
-      state = Starting;
     }
 
     void begin() {
+      restart();
     }
 
     boolean run() {
@@ -52,7 +78,7 @@ class AnimationWave1  : public BeginRun {
           running();
           return true;
           break;
-          
+
         case Stopping:
           stopping();
           return true;
@@ -72,7 +98,10 @@ class AnimationWave1  : public BeginRun {
         i_for_phase++;
 
         // till we've started everybody
-        if (i_for_phase >= half_segments) state = Running;
+        if (i_for_phase >= half_segments) {
+          Serial << F("AW running") << endl;
+          state = Running;
+        }
       }
     }
 
@@ -86,6 +115,8 @@ class AnimationWave1  : public BeginRun {
           // hit max/min, so reverse
           // FIXME: assuming around 0, add a around-home to all_motors or something
           all_motors->motors[i]->moveTo( - all_motors->motors[i]->currentPosition() );
+          Serial << F("AW chg dir ") << i << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
+
           // FIXME: and the other 1/2
 
           // only need to count cycles at motor[0]
@@ -93,6 +124,7 @@ class AnimationWave1  : public BeginRun {
             cycles ++;
             if (cycles >= total_cycles) {
               state = Stopping;
+              Serial << F("AW stopping") << endl;
               all_motors->motors[i]->moveTo( 0 ); // because we won't notice in Stopping for [0]
               // FIXME: and the other 1/2
             }
@@ -111,5 +143,7 @@ class AnimationWave1  : public BeginRun {
 
       // we get here if everybody has hit 0
       state = Idle;
+      Serial << F("AW idle") << endl;
+
     }
 };
