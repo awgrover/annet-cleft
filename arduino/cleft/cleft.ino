@@ -54,10 +54,11 @@ AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
 LimitSwitch* limit_switches = new LimitSwitch(MOTOR_CT);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
 AnimationWave1* animation = new AnimationWave1( // moving sine wave
-  stepper_shift->motors,
+  stepper_shift,
   0.15, // amplitude meters
   0.5, // wavelength fraction that fits in 1/2 of cleft
-  4.0 // frequency
+  4.0, // frequency
+  1 // cycles
 );
 
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
