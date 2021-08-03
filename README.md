@@ -17,7 +17,7 @@ So:
 * The files are arduino/*/*.h, that appear in more than 1 directory.
 * If you edit one of those, you'll need to copy it to the other places (and make sure they still work there).
 * Bummer.
-* If you are on linux, you can run: `make`. It hard-links files that are identical, which is how I do it on my development system.
+* If you are on linux, you can run: `make`. It tells you if there are differences.
 
 ## cleft/
 

@@ -40,6 +40,8 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
 #include "LimitSwitch.h"
+// #include "ArrayAnimation.h"
+#include "AnimationWave1.h"
 
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
@@ -50,14 +52,24 @@ constexpr int LATCH_PIN = LED_BUILTIN;
 // When testing/developing, you can set these to NULL to skip using them
 AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
 LimitSwitch* limit_switches = new LimitSwitch(MOTOR_CT);
+//ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
+AnimationWave1* animation = new AnimationWave1( // moving sine wave
+  stepper_shift->motors,
+  0.15, // amplitude meters
+  0.5, // wavelength fraction that fits in 1/2 of cleft
+  4.0 // frequency
+);
 
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
 // When testing/developing, you can set these to NULL to skip using them
 BeginRun* systems[] = {
   // all null: 9micros @ 8MHz 32u4
-  stepper_shift,  // 350micros @ 8MHz 32u4 1164 bytes used
-                  // plus about 60 for testing limit_switches
-  limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
+  stepper_shift,  // idle: 350micros @ 8MHz 32u4 1164 bytes used
+  // plus about 60 for testing limit_switches
+  // runall: 300micros @48Mhz samd21 1620 used
+  // idle: 78micros @48Mhz
+  //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
+  animation, //
 };
 
 void setup() {
@@ -95,8 +107,16 @@ void setup() {
   if (stepper_shift && limit_switches) stepper_shift->limit_switch = limit_switches->status;
 
   // other startup behavior
-  
+
   if (stepper_shift) stepper_shift->goto_limit();
+
+  Serial << F("FIXME // FIXME: not stepping at correct speed?") << endl;
+
+  // dumy move test
+  for (int i = 0; i < MOTOR_CT; i++) {
+
+    stepper_shift->motors[i]->move( 300 );
+  }
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
@@ -124,49 +144,24 @@ void loop() {
   elapsed.average( elapsed_micros  );
 
   if ( say_status() && last_elapsed != elapsed.value() ) {
-    Serial << F("Loop ") << elapsed.value() << " free " << freeMemory() << endl;
+    Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
+           << endl;
     last_elapsed = elapsed.value();
   }
 }
 
 /*
-  // prefix
-  #include "awg_combinators/serial.h"
-
-  constexpr int SEGMENT_CT = 7;
-  using Heights = float[SEGMENT_CT];
-
-  // Our bits
-  #include "AccelStepperMotorShield.h"
-  #include "ExponentialSmooth.h"
-  #include "every.h"
-  #include "freememory.h"
-  #include "array_animation.h"
-
-
-  void setup() {
-  Serial.begin(115200); while (!Serial);
-  Serial << F("Startup ") << millis() << F(" free ") << freeMemory() << endl;
-
-
-  all_motors.begin();
-  Serial << F("Animation ") << millis() << F(" free ") << freeMemory() << endl;
-  }
-
 
   void loop() {
-  static unsigned long last_time = millis();
+
   Heights delta;
   static ArrayAnimation anim; // = ArrayAnimation.goto_zero_plane();
 
   // note framerate
-  static Every say_looprate(500);
-  static ExponentialSmooth<unsigned long> framerate(1);
-  static unsigned long last_loop_time = millis();
   static Every animation_update(1000 / 10); // 10 frames/sec maximum
 
   // update motors every frame
-  if ( all_motors.run() || animation_update() ) { // i.e. done-running or time for next frame
+  if ( animation_update() ) { // i.e. done-running or time for next frame
     Serial << F("Next step") << endl;
 
     anim.update( millis() - last_time, delta);
