@@ -36,6 +36,8 @@ class AnimationWave1  : public BeginRun {
     void restart() {
       state = Starting;
       Serial << F("AW start") << endl;
+      i_for_phase = 0;
+      cycles = 0;
 
       // FIXME: each motor, set maxspeed and accel to achieve frequency for amplitude
 
@@ -52,11 +54,12 @@ class AnimationWave1  : public BeginRun {
         all_motors->motors[i]->setAcceleration(accel);
       }
 
-      Serial << F("Cycle length secs ") << cycle_length << endl
-             << F("Distance ") << distance << endl
-             << F("Accel time secs ") << time << endl
-             << F("accel steps/sec ") << accel << endl
-             << F("maxspeed steps/sec ") << speed << endl
+      Serial << F("  Amplitude steps ") << amplitude << endl
+             << F("  Cycle length secs ") << cycle_length << endl
+             << F("  Distance ") << distance << endl
+             << F("  Accel time secs ") << time << endl
+             << F("  Accel steps/sec ") << accel << endl
+             << F("  Maxspeed steps/sec ") << speed << endl
              ;
 
       start_next_phase.reset(phase_delay, true); // we intend to start running immediately, so start phase stuff immed
@@ -91,42 +94,56 @@ class AnimationWave1  : public BeginRun {
     }
 
     void startup() {
+      running(); // need to handle runninge segments
+
       if (start_next_phase()) {
         // at each phase, start the next motor
         all_motors->motors[i_for_phase]->moveTo( amplitude );
         // FIXME: start the other 1/2 of the segments, where 0->max, 1->max-1, etc
+        Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << endl;
         i_for_phase++;
 
         // till we've started everybody
         if (i_for_phase >= half_segments) {
-          Serial << F("AW running") << endl;
+          Serial << F("AW running") << millis() << endl;
           state = Running;
         }
       }
     }
 
     void running() {
+
       // wait till we hit min/max, reverse (or note that we are done)
       // it would be nice if we just got signalled that the motor hit its target...
       // sadly, we have to check them all
       // (I suppose we could calculate exactly when we'd hit "done", and thus need only one test)
       for (int i = 0; i < half_segments; i++) {
-        if ( abs(all_motors->motors[i]->currentPosition()) == amplitude ) {
-          // hit max/min, so reverse
-          // FIXME: assuming around 0, add a around-home to all_motors or something
-          all_motors->motors[i]->moveTo( - all_motors->motors[i]->currentPosition() );
-          Serial << F("AW chg dir ") << i << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
-          // FIXME: and the other 1/2
+        // only consider changes if we moved this time
+        if ( all_motors->motors[i]->do_step ) {
+          if ( abs(all_motors->motors[i]->currentPosition()) == (int) amplitude ) {
+            // hit max/min, so reverse
+            // FIXME: assuming around 0, add a around-home to all_motors or something
+            all_motors->motors[i]->moveTo( - all_motors->motors[i]->currentPosition() );
+            Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
-          // only need to count cycles at motor[0]
-          if (i == 0) {
-            cycles ++;
-            if (cycles >= total_cycles) {
-              state = Stopping;
-              Serial << F("AW stopping") << endl;
-              all_motors->motors[i]->moveTo( 0 ); // because we won't notice in Stopping for [0]
-              // FIXME: and the other 1/2
+            // FIXME: and the other 1/2
+
+            // only need to count cycles at motor[0]
+            // FIXME: end of thing is when [0] hits cycle, then each time we hit max, aim for zero, till all end & zerod
+            if (i == 0 ) {
+              cycles ++;
+              // "+1" because we go: 0 -> amp -> 0 -> -amp -> 0 -> amp. So initial +amp, then twice at +amp,-amp for a cycle
+              // so, really we do 1 + 1/4 cycles
+              if (cycles >= (total_cycles * 2) + 1) {
+                state = Stopping;
+                Serial << F("AW stopping") << millis() << endl;
+                for (int ii = 0; ii < half_segments; ii++) {
+                  all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
+                }
+                // FIXME: and the other 1/2
+                return;
+              }
             }
           }
         }
@@ -134,8 +151,14 @@ class AnimationWave1  : public BeginRun {
     }
 
     void stopping() {
+      // FIXME: this is wrong. keep phase shifting, but "tail" goes to 0 till all phased out, like runnning
+      
       // wait till all hit 0
+      // we don't look for do_step, because when we get to 0, there will be no do_step
+      // because we are pre-change...
+      static Every say_pos(100);
       for (int i = 0; i < half_segments; i++) {
+        if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
         if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
           return;
         }
@@ -143,7 +166,6 @@ class AnimationWave1  : public BeginRun {
 
       // we get here if everybody has hit 0
       state = Idle;
-      Serial << F("AW idle") << endl;
-
+      Serial << F("AW idle") << millis() << endl;
     }
 };

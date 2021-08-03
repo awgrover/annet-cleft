@@ -114,10 +114,9 @@ void setup() {
   Serial << F("FIXME // FIXME: not stepping at correct speed?") << endl;
 
   // dumy move test
-  for (int i = 0; i < MOTOR_CT; i++) {
-
-    stepper_shift->motors[i]->move( 300 );
-  }
+  //for (int i = 0; i < MOTOR_CT; i++) {
+  //  stepper_shift->motors[i]->move( 3000 );
+  // }
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
@@ -133,8 +132,15 @@ void loop() {
   // Run each object/module/system
   for (BeginRun* a_system : systems) {
     if (! a_system) continue; // skip NULLs
-
     a_system->run();
+  }
+
+  // let a system clean up from the state of one loop
+  // i.e. systems might check each other for a per-loop state
+  // e.g. AccelStepperNote sets do_step if it wants a step this loop
+  for (BeginRun* a_system : systems) {
+    if (! a_system) continue; // skip NULLs
+    a_system->finish_loop();
   }
 
   // keep track of loop time, and output status every so often

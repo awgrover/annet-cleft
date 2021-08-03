@@ -40,11 +40,13 @@ class AccelStepperNoted: public AccelStepper {
       return _direction;  // expose, true == foward
     }
 
+    const int motor_i; // my index
+
     boolean do_step; // true == do a step, reset after this is used
     boolean at_limit = false; // triggered by limit_switch detection
     int at_limit_pos = 0; // where the limit switch was last triggered
 
-    AccelStepperNoted() : AccelStepper(&dumyStep, &dumyStep) , do_step(false) {}
+    AccelStepperNoted(int i) : AccelStepper(&dumyStep, &dumyStep) , motor_i(i), do_step(false) {}
     static void dumyStep() {}
 
     void step(long astep) {
@@ -52,7 +54,7 @@ class AccelStepperNoted: public AccelStepper {
       // we just note that a step is requested
 
       (void)(astep); // Unused
-
+      //Serial << F("P ") << motor_i << F(" ") << currentPosition() << endl;
       do_step = true;
     }
 } ;
@@ -191,7 +193,7 @@ class AccelStepperShift : public BeginRun {
 
       motors = new AccelStepperNoted*[motor_ct];
       for (int i = 0; i < motor_ct; i++) {
-        motors[i] = new AccelStepperNoted;
+        motors[i] = new AccelStepperNoted(i);
       }
 
       // allocate the bit-vector
@@ -224,6 +226,13 @@ class AccelStepperShift : public BeginRun {
         return true;
       }
       return false;
+    }
+
+    void finish_loop() {
+      // reset do_step's
+      for (int i = 0; i < motor_ct; i++) {
+        motors[i]->do_step = false;
+      }
     }
 
     void set_led_bar() {
@@ -284,15 +293,18 @@ class AccelStepperShift : public BeginRun {
 
       static boolean all_done = false; // for debug messages
 
+      static Every say_pos(100);
+      boolean say = say_pos();
+      // if (say) Serial << F("  running @ ") << millis() << F(" ") << endl;
+
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
 
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
         if ( motors[i]->run() ) {
-          Serial << F("P ") << i << motors[i]->currentPosition() << endl;
-
           done = false;
+          if (say) Serial << F("P ") << i << F(" ") << motors[i]->currentPosition() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
@@ -319,7 +331,7 @@ class AccelStepperShift : public BeginRun {
 
       if (motors[i]->do_step) {
 
-        motors[i]->do_step = false; // reset once read
+        // the do_step flag is reset at finish_loop(), so we only handle a step once (till next step)
 
         int frame_i = extra_frames + unused_frames ;
         frame_i += i;
