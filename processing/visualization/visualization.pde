@@ -4,52 +4,62 @@ Visualizing the animations
  2. framework for "c++" like code of doing animations (minimal port work)
  */
 
-static boolean mouse_down = false;
-static PVector mouse_start = new PVector();
-static PVector last_mouse = new PVector();
-static PVector last_rotate = new PVector(0, -PI/8, 0); // start tilted
-static PVector rotate = new PVector();
+boolean mouse_down = false;
+PVector mouse_start = new PVector();
+PVector last_mouse = new PVector();
+PVector last_rotate = new PVector(0, -PI/8, 0); // start tilted
+PVector rotate = new PVector();
 
-static Cleft cleft;
+Cleft cleft;
+Serial arduino_port;
+
+Every check_arduino_port = new Every(500);
 
 static int segment_i; // selected segment to operate on
 
-Arduino arduino;
-
 void setup() {
+  size(1200, 924, P3D);
+
   GlobalProcessing.P = this;
-  
+
   println("Java " + System.getProperty("java.version"));
   println("I'm " + this.getClass().getName());
   println(" ... " + this.getClass().getPackage());
-  size(1200, 924, P3D);
   fill(255);
 
   rotate.set( last_rotate );
-  
+
   cleft = new Cleft();
   for (int i=0; i<cleft.height.length; i++) cleft.move(i, random(-1.0, 1.0));
   println(cleft.height);
-  
+
   println("1..9,a..f select segment");
   println("up/down move segment");
   println("del resets heights");
-  
-  arduino = new Arduino();
-  arduino.setup();
+  println("? asks arduino for hello");
+  println("R closes/reopens arduino port");
+
+  connect_to_arduino();
 }
 
 void draw() {
-  arduino.loop();
-  
+  if (check_arduino_port.now()) {
+    if (arduino_port == null) {
+      connect_to_arduino();
+    // sadly, no way to easily test if a serial-port disappeared
+    // you could search Serial.list() for the port your opened
+    // (an entry is a string, so save it, check)
+    }
+  }
+
   background(90);
-  
-  fill(0,0,255);
-  stroke(0,90,255);
+
+  fill(0, 0, 255);
+  stroke(0, 90, 255);
   sphere(20);
 
   stroke(0);
-  
+
   // x,y,z indicators: green, red, gray=z
   pushMatrix();
   fill(0, 255, 0);
@@ -99,6 +109,22 @@ void draw() {
   cleft.render();
 }
 
+void connect_to_arduino() {
+  if (arduino_port == null) {
+    arduino_port = connectUSBSerial(115200);
+    if (arduino_port != null) {
+      arduino_port.bufferUntil(10); // lf
+      delay(500);
+      arduino_port.write("?"); // evoke helo
+    }
+  }
+}
+
+void serialEvent(Serial port) {
+  String command = port.readString();
+  if (! command.startsWith("*") ) print("* " + command);
+}
+
 void mousePressed() { 
   mouse_down = true; 
   mouse_start.set(mouseX, mouseY);
@@ -127,6 +153,16 @@ void keyPressed() {
     } else if (key >= 'a' && key <= 'f') {
       segment_i = int(key) - int('a') + 10 - 1; // a is 10th which is [9]
       println("select " + segment_i);
+    } else if (key == '?') {
+      if (arduino_port != null) { 
+        arduino_port.write('?');
+      }
+      } else if (key == 'R') {
+      if (arduino_port != null) { 
+        arduino_port.stop();
+        arduino_port = null;
+        connect_to_arduino();
+      }
     } else if (int(key) == 127) {
       cleft.reset();
     } else if (int(key) == 43) {

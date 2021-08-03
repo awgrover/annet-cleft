@@ -11,8 +11,12 @@
   Based on a sensor (initially a 8x8 ir camera),
   the segments should perform various pleasing motions.
 
+  There is a provision for a visualization program written in processing.
+  We send commands starting with "<".
+  We respond to a few commands.
+  
   As of July 2021, the design is:
-    one arduino Zero equivalent (48MHz)
+    one arduino Zero equivalent (48MHz): adafruit Metro M0 Express
     15 motors, with TB6600 controllers, and limit switches
     a chain of shift registers driving the controllers (SPI)
     3 IR cameras (I2C)
@@ -42,6 +46,7 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "LimitSwitch.h"
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
+#include "Commands.h"
 
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
@@ -70,7 +75,8 @@ BeginRun* systems[] = {
   // runall: 300micros @48Mhz samd21 1620 used
   // idle: 78micros @48Mhz
   //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
-  animation, //
+  // animation, //
+  new Commands(stepper_shift),
 };
 
 void setup() {
@@ -88,10 +94,12 @@ void setup() {
 
   Serial.begin(115200); while (!Serial) {}
   Serial << endl;
+  // This prefix should be first, for memory/millis
   Serial << F("Start free ") << base_memory << endl;
   Serial << F("After Serial.begin ") << freeMemory() << endl;
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
 
+  
   // Each main object
   // We `new` them so we can more easily see memory usage in console
   last_free = freeMemory();

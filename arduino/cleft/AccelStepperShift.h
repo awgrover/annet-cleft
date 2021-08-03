@@ -54,7 +54,7 @@ class AccelStepperNoted: public AccelStepper {
       // we just note that a step is requested
 
       (void)(astep); // Unused
-      //Serial << F("P ") << motor_i << F(" ") << currentPosition() << endl;
+      //Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
       do_step = true;
     }
 } ;
@@ -304,7 +304,7 @@ class AccelStepperShift : public BeginRun {
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
         if ( motors[i]->run() ) {
           done = false;
-          if (say) Serial << F("P ") << i << F(" ") << motors[i]->currentPosition() << endl;
+          if (say) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
