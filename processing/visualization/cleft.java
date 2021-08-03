@@ -9,6 +9,8 @@ class Cleft {
 
   static final int SEGMENT_CT=15;
   static final int in_circle = 11; // leaving rest for tips
+  static final float STEPS_METER = 7.2f * 200; // fixme: get from arduino
+
   // Height of the outer edge of each segment
   // 0 = "center", so, we can go +/-
   float height[] = new float[SEGMENT_CT];
@@ -81,6 +83,14 @@ class Cleft {
     // calculate our rotateX from height
     float rotation = (float) Math.atan( height[segment_i] / depth );
     p.rotateX( rotation ); // so the inner-edge is still at z=0, because it was on xy
+  }
+
+  void goTo(int segment_i, float h) {
+    if (segment_i >= 0 && segment_i < SEGMENT_CT) {
+      height[segment_i] = h * scale_up;
+    } else {
+      p.println("bad segment_i " + segment_i);
+    }
   }
 
   void move(int segment_i, float distance) {

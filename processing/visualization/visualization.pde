@@ -4,6 +4,9 @@ Visualizing the animations
  2. framework for "c++" like code of doing animations (minimal port work)
  */
 
+import java.util.StringTokenizer;
+
+
 boolean mouse_down = false;
 PVector mouse_start = new PVector();
 PVector last_mouse = new PVector();
@@ -12,6 +15,7 @@ PVector rotate = new PVector();
 
 Cleft cleft;
 Serial arduino_port;
+boolean arduino_tracking = false;
 
 Every check_arduino_port = new Every(500);
 
@@ -36,8 +40,11 @@ void setup() {
   println("1..9,a..f select segment");
   println("up/down move segment");
   println("del resets heights");
-  println("? asks arduino for hello");
+  println("? starts tracking arduino");
   println("R closes/reopens arduino port");
+  println("# closes arduino port");
+  println("h tells arduino to home");
+  println("u tells arduino all up to 0.5 meters");
 
   connect_to_arduino();
 }
@@ -46,9 +53,9 @@ void draw() {
   if (check_arduino_port.now()) {
     if (arduino_port == null) {
       connect_to_arduino();
-    // sadly, no way to easily test if a serial-port disappeared
-    // you could search Serial.list() for the port your opened
-    // (an entry is a string, so save it, check)
+      // sadly, no way to easily test if a serial-port disappeared
+      // you could search Serial.list() for the port your opened
+      // (an entry is a string, so save it, check)
     }
   }
 
@@ -113,6 +120,7 @@ void connect_to_arduino() {
   if (arduino_port == null) {
     arduino_port = connectUSBSerial(115200);
     if (arduino_port != null) {
+      arduino_port.buffer(1024);
       arduino_port.bufferUntil(10); // lf
       delay(500);
       arduino_port.write("?"); // evoke helo
@@ -123,6 +131,37 @@ void connect_to_arduino() {
 void serialEvent(Serial port) {
   String command = port.readString();
   if (! command.startsWith("*") ) print("* " + command);
+
+  if (command.startsWith("<P ")) {
+    // <P idx pos
+    StringTokenizer tokens = new StringTokenizer(command);
+    tokens.nextToken(); // discard "<P "
+
+    // update our position
+    String t;
+    t= tokens.nextToken();
+    println("  token '" + t + "'");
+    try {
+      int i = Integer.parseInt( t );
+      t= tokens.nextToken();
+      println("  token '" + t + "'");
+      int steps = Integer.parseInt( t );
+      float position = steps / Cleft.STEPS_METER;
+
+      if (i >= 0 && i< Cleft.SEGMENT_CT) {
+        cleft.goTo(i, position);
+        println("Set " + i + " to " + position);
+      } else {
+        println("FAIL bad i for segment " + i);
+      }
+    } 
+    catch (NumberFormatException  e) {
+      println("FAIL bad int from arduino " + t);
+    }
+    catch (Exception  e) {
+      println("FAIL bad something from arduino " + e.toString());
+    }
+  }
 }
 
 void mousePressed() { 
@@ -156,8 +195,17 @@ void keyPressed() {
     } else if (key == '?') {
       if (arduino_port != null) { 
         arduino_port.write('?');
+        arduino_tracking = true;
+      } else {
+        println("Not connected to arduion");
       }
-      } else if (key == 'R') {
+    } else if (key == '-') {
+      arduino_tracking = false;
+    } else if (key == 'h') { 
+      arduino_port.write("Q0");
+    } else if (key == 'u') { 
+      arduino_port.write("Qu");
+    } else if (key == 'R') {
       if (arduino_port != null) { 
         arduino_port.stop();
         arduino_port = null;

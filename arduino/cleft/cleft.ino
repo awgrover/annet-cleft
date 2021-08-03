@@ -75,8 +75,8 @@ BeginRun* systems[] = {
   // runall: 300micros @48Mhz samd21 1620 used
   // idle: 78micros @48Mhz
   //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
-  // animation, //
-  new Commands(stepper_shift),
+  animation, //
+  new Commands(stepper_shift, animation),
 };
 
 void setup() {

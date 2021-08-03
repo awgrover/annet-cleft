@@ -16,7 +16,7 @@ class AnimationWave1  : public BeginRun {
     const int phase_delay; // in millis
     const int total_cycles; // how many to do
 
-    enum State { Starting, Running, Stopping, Idle };
+    enum State { Starting, Running, Stopping, Idle, Off };
     State state = Starting;
     int i_for_phase = 0;
     Every start_next_phase;
@@ -88,6 +88,10 @@ class AnimationWave1  : public BeginRun {
           break;
 
         case Idle:
+          break;
+
+        case Off:
+          // don't restart
           break;
       }
       return false; // IFF working
