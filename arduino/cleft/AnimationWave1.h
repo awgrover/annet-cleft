@@ -6,9 +6,21 @@
 #include "begin_run.h"
 #include "AccelStepperShift.h"
 
-class AnimationWave1  : public BeginRun {
+class Animation : public BeginRun {
   public:
+    enum State { Restart, Starting, Running, Stopping, Idle, Off };
+    static Animation* current_animation;
+    static Animation* animations[];
+    static const int animation_ct;
+    
     AccelStepperShift* const all_motors; // ->motors[] of AccelStepper
+    State state = Restart;
+
+    Animation(AccelStepperShift* all_motors) : all_motors(all_motors) {}
+};
+
+class AnimationWave1  : public Animation {
+  public:
     const float amplitude; // in steps
     const float cycle_fraction; // amount of full cycle that fits in 1/2 motor_ct
     const float frequency; // in cycles/sec
@@ -16,14 +28,12 @@ class AnimationWave1  : public BeginRun {
     const int phase_delay; // in millis
     const int total_cycles; // how many to do
 
-    enum State { Starting, Running, Stopping, Idle, Off };
-    State state = Starting;
     int i_for_phase = 0;
     Every start_next_phase;
     int cycles = 0; // total cycles
 
     AnimationWave1(AccelStepperShift* all_motors, float amplitude_meters, float cycle_fraction, float frequency, int total_cycles)
-      : all_motors(all_motors),
+      : Animation(all_motors),
         amplitude(amplitude_meters * AccelStepperShift::STEPS_METER),
         cycle_fraction(cycle_fraction),
         frequency(frequency),
@@ -67,11 +77,15 @@ class AnimationWave1  : public BeginRun {
     }
 
     void begin() {
-      restart();
     }
 
     boolean run() {
       switch (state) {
+        case Restart:
+          restart();
+          state = Starting;
+          break;
+          
         case Starting:
           startup();
           return true;

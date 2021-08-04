@@ -14,7 +14,7 @@
   There is a provision for a visualization program written in processing.
   We send commands starting with "<".
   We respond to a few commands.
-  
+
   As of July 2021, the design is:
     one arduino Zero equivalent (48MHz): adafruit Metro M0 Express
     15 motors, with TB6600 controllers, and limit switches
@@ -66,6 +66,12 @@ AnimationWave1* animation = new AnimationWave1( // moving sine wave
   1 // cycles
 );
 
+Animation* Animation::current_animation = animation;
+
+// this list is only for serial commands (see Commands)
+Animation* Animation::animations[] = { animation };
+const int Animation::animation_ct = array_size(animations);
+
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
 // When testing/developing, you can set these to NULL to skip using them
 BeginRun* systems[] = {
@@ -76,7 +82,7 @@ BeginRun* systems[] = {
   // idle: 78micros @48Mhz
   //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
   animation, //
-  new Commands(stepper_shift, animation),
+  new Commands(stepper_shift),
 };
 
 void setup() {
@@ -99,7 +105,7 @@ void setup() {
   Serial << F("After Serial.begin ") << freeMemory() << endl;
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
 
-  
+
   // Each main object
   // We `new` them so we can more easily see memory usage in console
   last_free = freeMemory();

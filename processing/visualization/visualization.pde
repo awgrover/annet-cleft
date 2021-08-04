@@ -16,6 +16,10 @@ PVector rotate = new PVector();
 Cleft cleft;
 Serial arduino_port;
 boolean arduino_tracking = false;
+boolean arduino_reopen = true; // false to stop trying
+
+// so I can map them to 1..9
+final char[] shift_numbers = {'!', '@', '#', '$', '%', '^', '&', '*', '(', ')'};
 
 Every check_arduino_port = new Every(500);
 
@@ -41,17 +45,18 @@ void setup() {
   println("up/down move segment");
   println("del resets heights");
   println("? starts tracking arduino");
-  println("R closes/reopens arduino port");
-  println("# closes arduino port");
+  println("r closes/reopens arduino port");
+  println("x closes arduino port");
   println("h tells arduino to home");
   println("u tells arduino all up to 0.5 meters");
+  println("shift 1..9 (re)starts animation 1..9");
 
   connect_to_arduino();
 }
 
 void draw() {
   if (check_arduino_port.now()) {
-    if (arduino_port == null) {
+    if (arduino_port == null && arduino_reopen) {
       connect_to_arduino();
       // sadly, no way to easily test if a serial-port disappeared
       // you could search Serial.list() for the port your opened
@@ -205,11 +210,18 @@ void keyPressed() {
       arduino_port.write("Q0");
     } else if (key == 'u') { 
       arduino_port.write("Qu");
-    } else if (key == 'R') {
+    } else if (key == 'r') {
       if (arduino_port != null) { 
         arduino_port.stop();
         arduino_port = null;
-        connect_to_arduino();
+      }
+      arduino_reopen = true;
+      connect_to_arduino();
+    } else if (key == 'x') {
+      if (arduino_port != null) { 
+        arduino_port.stop();
+        arduino_port = null;
+        arduino_reopen = false;
       }
     } else if (int(key) == 127) {
       cleft.reset();
@@ -218,6 +230,13 @@ void keyPressed() {
     } else if (int(key) == 45) {
       cleft.move(segment_i, 0.1);
     } else {
+      // detect the shift-numbers
+      for (int i=0; i<shift_numbers.length; i++) {
+        if (key == shift_numbers[i]) {
+          if (arduino_port != null) arduino_port.write(char(int('1') + i));
+        }
+      }
+
       println("what " + int(key) + " " + keyCode);
     }
   } else {
