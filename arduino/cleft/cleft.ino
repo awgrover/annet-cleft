@@ -55,7 +55,7 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #endif
 
 constexpr int MOTOR_CT = 15;
-constexpr int LATCH_PIN = LED_BUILTIN;
+constexpr int LATCH_PIN = 12;
 
 // SYSTEMS
 // We run them via systems[] (below)

@@ -18,7 +18,7 @@
 //#define DEBUGBITVECTOR 1
 // 1 to print the bit-vector every time
 // 2 to print on "blink"
-//#define DEBUGLOGBITVECTOR 2
+#define DEBUGLOGBITVECTOR 1
 // print position of each motor on each step if true
 //#define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
@@ -76,15 +76,21 @@ class AccelStepperShift : public BeginRun {
     // via a chain of shift-registers (2 bits per tb6600, 2 bits unused, common enable)
     //  74HC595
     //  Wiring: Arduino   Shift-Register
-    //                    VCC 3V
-    //                    GND
+    //                    16 VCC 3V must be 3v
+    //                    8 GND
     //          MOSI      14 SER
     //          SCK       11 SRCLK
     //          latch_pin 12 RCLK
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
+    //                    9 q7'/data-out -> daisy chain
     //  5MHz clock max at 2v, 25MHz at 5v, so... at 3v...
     //  20mA max per output (?)
+    //
+    // Indicators
+    //    SCK is too fast (only on for about 60micros!)
+    //    mosi gets left on, so not useful
+    //    data doesn't even seem to change!
     // using an AccelStepper per motor
     //
     // This class
@@ -427,21 +433,27 @@ class AccelStepperShift : public BeginRun {
       // each is about 60micros at 4MHz spi
       // at least 2.2micros pulse durations, and each takes 60, so ok
       // SPI.transfer(byte []) overwrites the byte[] buffer,
-      // and we want to reuse it here.
-      // SO make a copy of dir_bit_vector
+      // and we need to preserve it
+      // SO make a copy of bit_vectors
 
       byte dir_copy[byte_ct];
+      byte step_copy[byte_ct];
+
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
+      memcpy( step_copy, step_bit_vector, byte_ct * sizeof(byte));
 
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
       SPI.beginTransaction(SPISettings(6000000, LSBFIRST, SPI_MODE0));
 
-      SPI.transfer(dir_bit_vector, motor_ct);
+      SPI.transfer(dir_copy, motor_ct);
+
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
-      SPI.transfer(step_bit_vector, motor_ct);
+      SPI.transfer(step_copy, motor_ct);
+
+      memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
-      SPI.transfer(dir_bit_vector, motor_ct); // this is "step pulse off"
+      SPI.transfer(dir_copy, motor_ct); // this is "step pulse off"
 
       SPI.endTransaction(); // "as soon as possible"
       // last latch
