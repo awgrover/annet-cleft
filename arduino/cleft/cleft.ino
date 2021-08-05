@@ -48,6 +48,12 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "AnimationWave1.h"
 #include "Commands.h"
 
+// run "up" instead of animation
+//#define DEBUGMOVETEST 1
+#ifndef DEBUGMOVETEST
+#define DEBUGMOVETEST 0
+#endif
+
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = LED_BUILTIN;
 
@@ -127,10 +133,13 @@ void setup() {
 
   Serial << F("FIXME // FIXME: not stepping at correct speed?") << endl;
 
-  // dumy move test
-  //for (int i = 0; i < MOTOR_CT; i++) {
-  //  stepper_shift->motors[i]->move( 3000 );
-  // }
+  if (DEBUGMOVETEST) {
+    //  move test
+    Animation::current_animation->state = Animation::Off;
+    for (int i = 0; i < stepper_shift->motor_ct; i++) {
+      stepper_shift->motors[i]->moveTo( 0.5f * AccelStepperShift::STEPS_METER );
+    }
+  }
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;

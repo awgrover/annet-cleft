@@ -12,7 +12,7 @@ class Animation : public BeginRun {
     static Animation* current_animation;
     static Animation* animations[];
     static const int animation_ct;
-    
+
     AccelStepperShift* const all_motors; // ->motors[] of AccelStepper
     State state = Restart;
 
@@ -59,7 +59,10 @@ class AnimationWave1  : public Animation {
       int accel = (2 * distance) / (time * time); // steps per sec
       int speed = accel * time; // final speed
 
-      for (int i = 0; i < half_segments; i++) {
+      // FIXME: annet liked it being not perfectly balanced
+      // I had set the right-half segments to some other max/accel (the default I think)
+      // so, re-add some? or do another animation w/systemic assymetry
+      for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
       }
@@ -85,7 +88,7 @@ class AnimationWave1  : public Animation {
           restart();
           state = Starting;
           break;
-          
+
         case Starting:
           startup();
           return true;
@@ -117,8 +120,13 @@ class AnimationWave1  : public Animation {
       if (start_next_phase()) {
         // at each phase, start the next motor
         all_motors->motors[i_for_phase]->moveTo( amplitude );
+        all_motors->motors[all_motors->motor_ct - i_for_phase - 1]->moveTo( amplitude );
         // FIXME: start the other 1/2 of the segments, where 0->max, 1->max-1, etc
-        Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << endl;
+        Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << F(" & ") << (all_motors->motor_ct - i_for_phase - 1) << endl;
+        Serial << F("L ") << all_motors->motors[i_for_phase]->currentPosition()
+               << F(" R ") << all_motors->motors[i_for_phase]->currentPosition()
+               << endl;
+
         i_for_phase++;
 
         // till we've started everybody
@@ -142,7 +150,11 @@ class AnimationWave1  : public Animation {
           if ( abs(all_motors->motors[i]->currentPosition()) == (int) amplitude ) {
             // hit max/min, so reverse
             // FIXME: assuming around 0, add a around-home to all_motors or something
+            // fixme: this reverses when [0..7] hit max, but that means [8..14] are 1 behind!
+            //  so, we'll get slightly out of step (by 1 on each reverse)
+            //  could fix by testing [7..14] instead...
             all_motors->motors[i]->moveTo( - all_motors->motors[i]->currentPosition() );
+            all_motors->motors[all_motors->motor_ct - i - 1]->moveTo( - all_motors->motors[i]->currentPosition() );
             Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
             // FIXME: and the other 1/2
@@ -158,6 +170,7 @@ class AnimationWave1  : public Animation {
                 Serial << F("AW stopping") << millis() << endl;
                 for (int ii = 0; ii < half_segments; ii++) {
                   all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
+                  all_motors->motors[all_motors->motor_ct - ii - 1]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                 }
                 // FIXME: and the other 1/2
                 return;
@@ -170,7 +183,7 @@ class AnimationWave1  : public Animation {
 
     void stopping() {
       // FIXME: this is wrong. keep phase shifting, but "tail" goes to 0 till all phased out, like runnning
-      
+
       // wait till all hit 0
       // we don't look for do_step, because when we get to 0, there will be no do_step
       // because we are pre-change...

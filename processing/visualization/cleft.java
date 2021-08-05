@@ -8,7 +8,7 @@ class Cleft {
   final PApplet p;
 
   static final int SEGMENT_CT=15;
-  static final int in_circle = 11; // leaving rest for tips
+  static final int in_circle = 15;
   static final float STEPS_METER = 7.2f * 200; // fixme: get from arduino
 
   // Height of the outer edge of each segment
@@ -43,30 +43,14 @@ class Cleft {
     // 11 around a half circle
     // 2 off each end straight out
 
-    // tips: straight out
-    // [0,1, 13,14]
-    for (int tip_edge=0; tip_edge<=1; tip_edge++) {
-      // going clockwise, "left"/first tip is 0
-      // i.e. [0,1] is mirror of [14,13]
-      for (int i=0; i<=1; i++) {
-        int segment_i = tip_edge == 0 ? 1-i : 13 + i;
-        float tip_direction = tip_edge == 0 ? -1 : 1;
-        p.pushMatrix();
-        p.rotateZ(tip_direction * p.PI/2.0f); // inner-edge on y
-        p.translate( tip_direction * (i * (outer_width + spacing) + outer_width + spacing ), - cleft_radius  );
-        set_to_height( segment_i );
-        p.shape(segment);
-        if (first_time) p.println("draw " + segment_i);
-        p.popMatrix();
-      }
-    }
-
+    
     // around circle
-    final float interval = p.PI/(in_circle - 1)  ; // used 4 in tips
+    // with a gap of 3
+    final float interval = (2*p.PI)/(in_circle - 1 + 3)  ; // gap 3
     final int per_tip = (SEGMENT_CT - in_circle) / 2;
     for (int segment_i=per_tip; segment_i<in_circle+per_tip; segment_i++) {
       p.pushMatrix();
-      p.rotateZ((segment_i-per_tip) * interval - p.PI/2);
+      p.rotateZ((segment_i-per_tip) * interval - p.PI/2 - 2.75f * interval);
       p.translate( 0, - cleft_radius  );
       set_to_height( segment_i );
       p.shape(segment);

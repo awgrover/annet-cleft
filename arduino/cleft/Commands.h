@@ -42,7 +42,7 @@ class Commands : public BeginRun {
             }
             break;
           case 'u': // stop animation, goto up
-            Serial << F("Homing") << endl;
+            Serial << F("Upping") << endl;
             Animation::current_animation->state = Animation::Off;
             for (int i = 0; i < all_motors->motor_ct; i++) {
               all_motors->motors[i]->moveTo( 0.5f * AccelStepperShift::STEPS_METER );

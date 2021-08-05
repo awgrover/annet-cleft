@@ -19,6 +19,10 @@
 // 1 to print the bit-vector every time
 // 2 to print on "blink"
 //#define DEBUGLOGBITVECTOR 2
+// print position of each motor on each step if true
+//#define DEBUGPOSPERSTEP 1
+// stop run()'ing after this number of steps, 0 means don't stop
+//#define DEBUGSTOPAFTER 3
 
 #ifndef DEBUGDONERUN
 #define DEBUGDONERUN 0
@@ -28,6 +32,13 @@
 #endif
 #ifndef DEBUGLOGBITVECTOR
 #define DEBUGLOGBITVECTOR 0
+#endif
+
+#ifndef DEBUGPOSPERSTEP
+#define DEBUGPOSPERSTEP 0
+#endif
+#ifndef DEBUGSTOPAFTER
+#define DEBUGSTOPAFTER 0
 #endif
 
 class AccelStepperNoted: public AccelStepper {
@@ -54,7 +65,8 @@ class AccelStepperNoted: public AccelStepper {
       // we just note that a step is requested
 
       (void)(astep); // Unused
-      //Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
+      if (DEBUGPOSPERSTEP) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
+      // FIXME: accel of 14 isn't right? too high
       do_step = true;
     }
 } ;
@@ -111,7 +123,8 @@ class AccelStepperShift : public BeginRun {
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
     static float constexpr MAX_MOTION = 0.5; // meters fixme: measure
     static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
-
+    static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
+    
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
     // We shift out LSB 1st,
@@ -208,11 +221,10 @@ class AccelStepperShift : public BeginRun {
         // to 200 steps/sec in 0.1 sec
         // targetspeed = 1/2 * A * 0.1
         // (targetspeed*2)/0.1
-        constexpr int max_speed = 200;
         constexpr float time_to_max = 0.1;
-        constexpr int acceleration = (max_speed * 2) / time_to_max;
+        constexpr int acceleration = (MAX_SPEED * 2) / time_to_max;
         motors[i]->setAcceleration(acceleration);
-        motors[i]->setMaxSpeed(max_speed); // might be limited by maximum loop speed
+        motors[i]->setMaxSpeed(MAX_SPEED); // might be limited by maximum loop speed
       }
 
       // setup SPI. not nice. should be global in main setup()
@@ -291,12 +303,15 @@ class AccelStepperShift : public BeginRun {
       // return true if ANY ran (have to shift all bits)
       // We should be overwriting the whole bit-vector buffer(s), all bits
 
-      static boolean all_done = false; // for debug messages
-
+      static boolean all_done = false; // for debug messages FIXME
+      static int step_count = 0; // for debug, see DEBUGSTOPAFTER
+      
       static Every say_pos(100);
       boolean say = say_pos();
       // if (say) Serial << F("  running @ ") << millis() << F(" ") << endl;
 
+      if (DEBUGSTOPAFTER && step_count >= DEBUGSTOPAFTER) return false;
+      
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
@@ -304,7 +319,7 @@ class AccelStepperShift : public BeginRun {
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
         if ( motors[i]->run() ) {
           done = false;
-          if (say) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << endl;
+          if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
@@ -319,6 +334,7 @@ class AccelStepperShift : public BeginRun {
         collect_bit(i);
 
       }
+      if (!done) step_count++;
       if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << endl;
       all_done = done;
 

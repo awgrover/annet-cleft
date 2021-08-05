@@ -145,17 +145,17 @@ void serialEvent(Serial port) {
     // update our position
     String t;
     t= tokens.nextToken();
-    println("  token '" + t + "'");
+    //println("  token '" + t + "'");
     try {
       int i = Integer.parseInt( t );
       t= tokens.nextToken();
-      println("  token '" + t + "'");
+      //println("  token '" + t + "'");
       int steps = Integer.parseInt( t );
       float position = steps / Cleft.STEPS_METER;
 
       if (i >= 0 && i< Cleft.SEGMENT_CT) {
         cleft.goTo(i, position);
-        println("Set " + i + " to " + position);
+        //println("Set " + i + " to " + position);
       } else {
         println("FAIL bad i for segment " + i);
       }
