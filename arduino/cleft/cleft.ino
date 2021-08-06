@@ -75,7 +75,16 @@ AnimationWave1* animation = new AnimationWave1( // moving sine wave
 Animation* Animation::current_animation = animation;
 
 // this list is only for serial commands (see Commands)
-Animation* Animation::animations[] = { animation };
+Animation* Animation::animations[] = {
+  animation,
+  new AnimationWave2( // the cute wave "@"
+    stepper_shift,
+    5, // segments
+    0.25, // max amplitude
+    1, // frequency
+    2 // cycles
+  )
+};
 const int Animation::animation_ct = array_size(animations);
 
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
@@ -87,7 +96,7 @@ BeginRun* systems[] = {
   // runall: 300micros @48Mhz samd21 1620 used
   // idle: 78micros @48Mhz
   //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
-  animation, //
+  //// NB Animation::current_animation, NEVER goes in here. sad
   new Commands(stepper_shift),
 };
 
@@ -157,6 +166,8 @@ void loop() {
     if (! a_system) continue; // skip NULLs
     a_system->run();
   }
+  // bah, I change animations, but I would have to update systems[n]
+  if (Animation::current_animation) Animation::current_animation->run();
 
   // let a system clean up from the state of one loop
   // i.e. systems might check each other for a per-loop state
@@ -175,6 +186,7 @@ void loop() {
 
   if ( say_status() && last_elapsed != elapsed.value() ) {
     Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
+           << F(" animation ") << ( (long) Animation::current_animation)
            << endl;
     last_elapsed = elapsed.value();
   }

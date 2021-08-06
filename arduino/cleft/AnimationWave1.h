@@ -61,7 +61,7 @@ class AnimationWave1  : public Animation {
 
       // FIXME: annet liked it being not perfectly balanced
       // I had set the right-half segments to some other max/accel (the default I think)
-      // so, re-add some? or do another animation w/systemic assymetry
+      // so, re-add some? or do another animation w/systemic assymetrys
       for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
@@ -198,5 +198,165 @@ class AnimationWave1  : public Animation {
       // we get here if everybody has hit 0
       state = Idle;
       Serial << F("AW idle") << millis() << endl;
+    }
+};
+
+class AnimationWave2  : public Animation {
+    // a "cute" hand wave
+  public:
+    const float amplitude; // in steps
+    const float frequency; // in cycles/sec
+    const int segments;
+    const int total_cycles; // how many to do
+
+    int cycles = 0; // total cycles
+
+    AnimationWave2(AccelStepperShift* all_motors, int segments, float amplitude_meters, float frequency, int total_cycles)
+      : Animation(all_motors),
+        amplitude(amplitude_meters * AccelStepperShift::STEPS_METER),
+        frequency(frequency),
+        segments( segments ), // works for odd number of segments
+        total_cycles(total_cycles)
+    {
+    }
+
+    void restart() {
+      Serial << F("AW start ") << ((long) this) << endl;
+      cycles = 0;
+
+      // FIXME: each motor, set maxspeed and accel to achieve frequency for amplitude
+
+      float cycle_length = 1.0 / frequency; // seconds per cycle
+      int distance = (amplitude / 2.0); // how far we'll need to move
+      // we'll accel half the distance, then decel half
+      // 1/2 at^2 = distance
+      float time = (cycle_length / 2);
+      int accel = (2 * distance) / (time * time); // steps per sec
+      int speed = accel * time; // final speed
+
+      // initial target is the max-amplitude of each segment
+      for (int i = 0; i < segments; i++) {
+        all_motors->motors[i]->setMaxSpeed(speed);
+        all_motors->motors[i]->setAcceleration(accel);
+        all_motors->motors[i]->moveTo( amplitude_for_segment(i, HIGH) );
+      }
+
+      Serial << F("  Segments ") << segments << endl
+             << F("  Amplitude steps ") << amplitude << endl
+             << F("  Cycle length secs ") << cycle_length << endl
+             << F("  Distance ") << distance << endl
+             << F("  Accel time secs ") << time << endl
+             << F("  Accel steps/sec ") << accel << endl
+             << F("  Maxspeed steps/sec ") << speed << endl
+             ;
+    }
+
+    void begin() {
+    }
+
+    boolean run() {
+      switch (state) {
+        case Restart:
+          restart();
+          state = Running;
+          break;
+
+        case Starting:
+          startup();
+          return true;
+          break;
+
+        case Running:
+          running();
+          return true;
+          break;
+
+        case Stopping:
+          stopping();
+          return true;
+          break;
+
+        case Idle:
+          break;
+
+        case Off:
+          // don't restart
+          break;
+      }
+      return false; // IFF working
+    }
+
+    void startup() {
+      // Nothing to do, just run
+      Serial << F("FAIL: should do startup") << endl;
+      delay(500);
+    }
+
+    void running() {
+
+      // wait till we hit min/max, reverse (or note that we are done)
+      // it would be nice if we just got signalled that the motor hit its target...
+      // sadly, we have to check them all
+      // (I suppose we could calculate exactly when we'd hit "done", and thus need only one test)
+      for (int i = 0; i < segments; i++) {
+        // Serial << F("MOTOR ") << i << endl;
+        // only consider changes if we moved this time
+        if ( all_motors->motors[i]->do_step ) {
+          const boolean direction = all_motors->motors[i]->direction();
+          const int min_max_amp = amplitude_for_segment(i, direction);
+          const long pos = all_motors->motors[i]->currentPosition();
+          const boolean hit_min_max = direction ? pos >= min_max_amp : pos <= min_max_amp;
+          //Serial << F("  dir ") << direction << F(" pos ") << pos
+          //       << F(" minmax ") << min_max_amp << F(" hit? ") << hit_min_max
+          //       << endl;
+
+          if ( hit_min_max ) {
+            // so reverse
+            // FIXME: assuming around 0, add a around-home to all_motors or something
+            all_motors->motors[i]->moveTo( amplitude_for_segment(i, ! direction) );
+            Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
+
+            // only need to count cycles at motor[max]
+            // FIXME: end of thing is when [0] hits cycle, then each time we hit max, aim for zero, till all end & zerod
+            if (i == 0) {
+              cycles ++;
+              // "+1" because we go: 0 -> amp -> 0 -> -amp -> 0 -> amp.
+              // so, really we do 1 + 4 cycles
+              if (cycles >= (2 * total_cycles) + 1) {
+              state = Stopping;
+              Serial << F("AW stopping") << millis() << endl;
+                for (int ii = 0; ii < segments; ii++) {
+                  all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
+                }
+                // FIXME: and the other 1/2
+                return;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    void stopping() {
+      // FIXME: this is wrong. keep phase shifting, but "tail" goes to 0 till all phased out, like runnning
+
+      // wait till all hit 0
+      // we don't look for do_step, because when we get to 0, there will be no do_step
+      // because we are pre-change...
+      static Every say_pos(100);
+      for (int i = 0; i < segments; i++) {
+        if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
+        if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
+          return;
+        }
+      }
+
+      // we get here if everybody has hit 0
+      state = Idle;
+      Serial << F("AW idle") << millis() << endl;
+    }
+
+    int amplitude_for_segment(int motor_i, boolean top) {
+      return top ? amplitude : (amplitude / 2);
     }
 };

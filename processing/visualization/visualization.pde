@@ -151,7 +151,7 @@ void serialEvent(Serial port) {
       t= tokens.nextToken();
       //println("  token '" + t + "'");
       int steps = Integer.parseInt( t );
-      float position = steps / Cleft.STEPS_METER;
+      float position = - steps / Cleft.STEPS_METER;
 
       if (i >= 0 && i< Cleft.SEGMENT_CT) {
         cleft.goTo(i, position);
@@ -230,9 +230,10 @@ void keyPressed() {
     } else if (int(key) == 45) {
       cleft.move(segment_i, 0.1);
     } else {
-      // detect the shift-numbers
+      // detect the shift-numbers, convert to 1..n
       for (int i=0; i<shift_numbers.length; i++) {
         if (key == shift_numbers[i]) {
+          println("Send animation " + char(int('1') + i));
           if (arduino_port != null) arduino_port.write(char(int('1') + i));
         }
       }

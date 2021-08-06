@@ -52,11 +52,17 @@ class Commands : public BeginRun {
             if (command >= '1' && command <= '9') {
               // run an animation
               int animation_i = command - '1';
-              Serial << F("restart animation ") << animation_i << endl;
+              Serial << F("restart animation ") << (animation_i + 1 ) << endl;
               if (animation_i < Animation::animation_ct) {
                 Animation::current_animation->state = Animation::Off;
                 Animation::current_animation = Animation::animations[animation_i];
                 Animation::current_animation->state = Animation::Restart;
+                Serial << F("  animation is ") << ((long) Animation::current_animation)
+                       << F(" @ ") << Animation::current_animation->state
+                       << endl;
+              }
+              else {
+                Serial << F("No Such Animation") << endl;
               }
             }
             return false; // not handling a command is false

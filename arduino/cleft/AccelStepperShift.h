@@ -18,9 +18,9 @@
 //#define DEBUGBITVECTOR 1
 // 1 to print the bit-vector every time
 // 2 to print on "blink"
-#define DEBUGLOGBITVECTOR 1
+//#define DEBUGLOGBITVECTOR 1
 // print position of each motor on each step if true
-//#define DEBUGPOSPERSTEP 1
+#define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 3
 
