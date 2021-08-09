@@ -13,16 +13,21 @@
 // probably too noisy when running a real pattern
 #define DEBUGDONERUN 1
 
-// the COUNT of motors to debug.
+// the COUNT of motors to debug, stops after that
 //  undef or -1 is don't,
-#define DEBUGBITVECTOR 1
-// 1 to print the bit-vector every time, with "set" info too
+//#define DEBUGBITVECTOR 1
+// 1 to print the bit-vector every time
 // 2 to print on "blink"
-#define DEBUGLOGBITVECTOR 1
+// 3 to print on shift-out
+//#define DEBUGLOGBITVECTOR 3
 // print position of each motor on each step if true
-#define DEBUGPOSPERSTEP 1
+//#define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
-//#define DEBUGSTOPAFTER 3
+//#define DEBUGSTOPAFTER 2
+// print calcalation for frame[i] = value & mask
+///#define DEBUGFRAME 1
+// Delay between each shift
+//#define DEBUGSTUPIDSLOW 500
 
 #ifndef DEBUGDONERUN
 #define DEBUGDONERUN 0
@@ -39,6 +44,12 @@
 #endif
 #ifndef DEBUGSTOPAFTER
 #define DEBUGSTOPAFTER 0
+#endif
+#ifndef DEBUGFRAME
+#define DEBUGFRAME 0
+#endif
+#ifndef DEBUGSTUPIDSLOW
+#define DEBUGSTUPIDSLOW 0
 #endif
 
 class AccelStepperNoted: public AccelStepper {
@@ -337,18 +348,25 @@ class AccelStepperShift : public BeginRun {
 
       if (DEBUGSTOPAFTER && step_count >= DEBUGSTOPAFTER) return false;
 
+      //Serial << F("run all, already all_done? ") << all_done << endl;
+
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
 
+        // NB. AccelStepper thinks the protocol is:
+        //    step(), if that was last step then ->run() will return false
+        // Which means we will not see run()==true for the last step. thus:
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
-        if ( motors[i]->run() ) {
+        if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
           if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
         }
+
+        //Serial << F("  motors at i done? ") << i << F(" ") << done << endl;
 
         if (false && DEBUGBITVECTOR > 0 && DEBUGBITVECTOR <= i && !all_done) {
           Serial
@@ -360,8 +378,9 @@ class AccelStepperShift : public BeginRun {
 
       }
       if (!done) step_count++;
-      if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << endl;
+      if (DEBUGDONERUN && (!all_done && done)) Serial << F("All done @ ") << millis() << F(" steps ") << step_count << endl;
       all_done = done;
+      //if (!all_done) Serial << F("Done ? ") << all_done << endl;
 
       return ! done;
     }
@@ -370,12 +389,11 @@ class AccelStepperShift : public BeginRun {
       // collect the bits
       // about 100micros for all 15 at 8MHz 32u4
 
+      int frame_i = i;
+
       if (motors[i]->do_step) {
 
         // the do_step flag is reset at finish_loop(), so we only handle a step once (till next step)
-
-        int frame_i = extra_frames + unused_frames ;
-        frame_i += i;
 
         if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
           Serial << F("BV motor[") << i << F("] ")
@@ -401,7 +419,7 @@ class AccelStepperShift : public BeginRun {
         if (! allow_step) Serial << F("CRASH motor ") << i << endl;
 
         // want the dir-bit AND step (unless limit-switch while going up)
-        const byte step_bit = ((motors[i]->direction() ? FWD_DIRBIT : REV_DIRBIT) | allow_step ? STEPBIT : NOT_STEPBIT);
+        const byte step_bit = dir_bit | (allow_step ? STEPBIT : NOT_STEPBIT);
 
         if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
           Serial << "  new dir_bits " << _BIN(dir_bit) << endl;
@@ -428,20 +446,31 @@ class AccelStepperShift : public BeginRun {
           if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR == i) while (1) delay(20);
         }
       }
+      else {
+        // no step(), so mark/clear as such
+        // (dir_bit won't matter)
+        set_frame( step_bit_vector, frame_i, frame_mask, NOT_STEPBIT );
+      }
     }
 
     void dump_bit_vectors() {
       // just for debug print
       byte* twobvs[2] = { dir_bit_vector, step_bit_vector };
       for (byte* bv : twobvs) {
-        for (int bi = byte_ct - 1; bi >= 0; bi--) {
-          for (int bit_i = 0; bit_i < 8; bit_i++) {
-            if ( ! (bit_i % bits_per_frame) && bit_i != 0) Serial << ".";
-            Serial << ( ( bv[bi] & (1 << (7 - bit_i)) ) ? '1' : '0' );
-          }
-          Serial << " ";
+        dump_bit_vector(bv);
+      }
+      Serial << endl;
+    }
+
+    void dump_bit_vector(byte *bit_vector) {
+      // NB; [8] is shifted out last, so is shift-register nearest ard
+      // We reorder here so it reads right-to-left
+      for (int bi = 0; bi < byte_ct; bi++) {
+        for (int bit_i = 0; bit_i < 8; bit_i++) {
+          if ( ! (bit_i % bits_per_frame) && bit_i != 0) Serial << ".";
+          Serial << ( ( bit_vector[bi] & (1 << (7 - bit_i)) ) ? '1' : '0' );
         }
-        Serial << endl;
+        Serial << " ";
       }
       Serial << endl;
     }
@@ -457,6 +486,8 @@ class AccelStepperShift : public BeginRun {
 
       byte dir_copy[byte_ct];
       byte step_copy[byte_ct];
+      unsigned long start = millis();
+      if (DEBUGLOGBITVECTOR == 3) Serial << F("shift out ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
 
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
       memcpy( step_copy, step_bit_vector, byte_ct * sizeof(byte));
@@ -464,19 +495,28 @@ class AccelStepperShift : public BeginRun {
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
       SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
 
-      SPI.transfer(dir_copy, motor_ct);
+      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
+      SPI.transfer(dir_copy, byte_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+      if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
-      SPI.transfer(step_copy, motor_ct);
+      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(step_copy);
+      SPI.transfer(step_copy, byte_ct);
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+      if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
-      SPI.transfer(dir_copy, motor_ct); // this is "step pulse off"
+      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
+      SPI.transfer(dir_copy, byte_ct); // this is "step pulse off"
 
       SPI.endTransaction(); // "as soon as possible"
       // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+      if (DEBUGSTUPIDSLOW) {
+        Serial << F("--- ") << (millis() - start) << endl;
+        delay(DEBUGSTUPIDSLOW);
+      }
     }
 
     inline int set_frame( byte * bit_vector, int frame_i, byte mask, byte value ) {
@@ -492,7 +532,7 @@ class AccelStepperShift : public BeginRun {
       const int r_byte_i = (byte_ct - 1) - byte_i;
       const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
       const int offset = (frame_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=4, frame2=0, etc
-      if (DEBUGBITVECTOR > 0) {
+      if (DEBUGFRAME > 0) {
         Serial << F("    set frame ") << frame_i << F(" = 0b") << _BIN(value) << F(" mask ") << _BIN(mask)
                << F(" byte[") << r_byte_i << F("]")
                << F(" frameoffset ") << (frame_i % frames_per_byte ) << F(" <<offset ") << offset

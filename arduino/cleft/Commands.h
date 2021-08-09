@@ -52,13 +52,13 @@ class Commands : public BeginRun {
 
           case '+': // up 2 steps
             for (int i = 0; i < all_motors->motor_ct; i++) {
-              all_motors->motors[i]->moveTo( all_motors->motors[i]->currentPosition() + 2 );
+              all_motors->motors[i]->move(2);
             }
             break;
 
           case '-': // down 2 steps
             for (int i = 0; i < all_motors->motor_ct; i++) {
-              all_motors->motors[i]->moveTo( all_motors->motors[i]->currentPosition() - 2 );
+              all_motors->motors[i]->move( -2 );
             }
             break;
 
