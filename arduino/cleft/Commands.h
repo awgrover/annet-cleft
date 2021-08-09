@@ -41,6 +41,7 @@ class Commands : public BeginRun {
               all_motors->motors[i]->moveTo( 0 );
             }
             break;
+          
           case 'u': // stop animation, goto up
             Serial << F("Upping") << endl;
             Animation::current_animation->state = Animation::Off;
@@ -48,6 +49,20 @@ class Commands : public BeginRun {
               all_motors->motors[i]->moveTo( 0.5f * AccelStepperShift::STEPS_METER );
             }
             break;
+
+          case '+': // up 2 steps
+            for (int i = 0; i < all_motors->motor_ct; i++) {
+              all_motors->motors[i]->moveTo( all_motors->motors[i]->currentPosition() + 2 );
+            }
+            break;
+
+          case '-': // down 2 steps
+            for (int i = 0; i < all_motors->motor_ct; i++) {
+              all_motors->motors[i]->moveTo( all_motors->motors[i]->currentPosition() - 2 );
+            }
+            break;
+
+
           default:
             if (command >= '1' && command <= '9') {
               // run an animation

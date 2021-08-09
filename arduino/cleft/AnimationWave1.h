@@ -323,8 +323,8 @@ class AnimationWave2  : public Animation {
               // "+1" because we go: 0 -> amp -> 0 -> -amp -> 0 -> amp.
               // so, really we do 1 + 4 cycles
               if (cycles >= (2 * total_cycles) + 1) {
-              state = Stopping;
-              Serial << F("AW stopping") << millis() << endl;
+                state = Stopping;
+                Serial << F("AW stopping") << millis() << endl;
                 for (int ii = 0; ii < segments; ii++) {
                   all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                 }
@@ -357,6 +357,9 @@ class AnimationWave2  : public Animation {
     }
 
     int amplitude_for_segment(int motor_i, boolean top) {
-      return top ? amplitude : (amplitude / 2);
+      // full amplitude for [0], reducing to 10% for nth
+      float fraction = (segments - motor_i) / (float) segments;
+      int max_amp = amplitude * fraction;
+      return top ? max_amp : (fraction * (amplitude / 2));
     }
 };

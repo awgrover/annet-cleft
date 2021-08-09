@@ -48,8 +48,8 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "AnimationWave1.h"
 #include "Commands.h"
 
-// run "up" instead of animation
-//#define DEBUGMOVETEST 1
+// if true: no initial movement, +|- move up 2, down 2
+#define DEBUGMOVETEST 1
 #ifndef DEBUGMOVETEST
 #define DEBUGMOVETEST 0
 #endif
@@ -82,7 +82,7 @@ Animation* Animation::animations[] = {
     5, // segments
     0.25, // max amplitude
     1, // frequency
-    2 // cycles
+    1 // cycles
   )
 };
 const int Animation::animation_ct = array_size(animations);
@@ -145,9 +145,6 @@ void setup() {
   if (DEBUGMOVETEST) {
     //  move test
     Animation::current_animation->state = Animation::Off;
-    for (int i = 0; i < stepper_shift->motor_ct; i++) {
-      stepper_shift->motors[i]->moveTo( 0.5f * AccelStepperShift::STEPS_METER );
-    }
   }
 
   // and

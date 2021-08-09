@@ -15,10 +15,10 @@
 
 // the COUNT of motors to debug.
 //  undef or -1 is don't,
-//#define DEBUGBITVECTOR 1
-// 1 to print the bit-vector every time
+#define DEBUGBITVECTOR 1
+// 1 to print the bit-vector every time, with "set" info too
 // 2 to print on "blink"
-//#define DEBUGLOGBITVECTOR 1
+#define DEBUGLOGBITVECTOR 1
 // print position of each motor on each step if true
 #define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
@@ -73,19 +73,31 @@ class AccelStepperNoted: public AccelStepper {
 
 class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
-    // via a chain of shift-registers (2 bits per tb6600, 2 bits unused, common enable)
+    //    input labeling seems confusing, all+ to +, pul- steps on transition to high.
+    // via a chain of shift-registers (2 bits per tb6600, 2 bits unused per, common enable)
     //  74HC595
-    //  Wiring: Arduino   Shift-Register
-    //                    16 VCC 3V must be 3v
-    //                    8 GND
+    //  Wiring: Arduino   Shift-Register          tb6600
+    //          3.3V      16 VCC 3V must be 3v    dir+,pul+,en+
+    //          GND       8 GND
     //          MOSI      14 SER
     //          SCK       11 SRCLK
     //          latch_pin 12 RCLK
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
-    //                    9 q7'/data-out -> daisy chain
+    //                    9 q7'/data-out -> SER
+    //                    15 q0                   dir-
+    //                    1 q1                    pul- (step)
+    //                    (q4/q5 same to #2)
+    //          GND
+    //          PinX                              en- (HIGH for engage, low for free)
+    //
     //  5MHz clock max at 2v, 25MHz at 5v, so... at 3v...
     //  20mA max per output (?)
+    //
+    // To test for acceleration
+    //    Set the driver to a very small current so the motor will slip (maybe 0.5A).
+    //    Test various accelerations till no slip
+    //    Set the driver back to operating current
     //
     // Indicators
     //    SCK is too fast (only on for about 60micros!)
@@ -118,10 +130,10 @@ class AccelStepperShift : public BeginRun {
   public:
     // per frame
     // invert if necessary
-    static byte constexpr FWD_DIRBIT = 1 << 1;
-    static byte constexpr REV_DIRBIT = 0 << 1;
-    static byte constexpr STEPBIT = 1 << 0;
-    static byte constexpr NOT_STEPBIT = 0 << 0;
+    static byte constexpr FWD_DIRBIT = 1 << 0;
+    static byte constexpr REV_DIRBIT = 0 << 0;
+    static byte constexpr STEPBIT = 1 << 1;
+    static byte constexpr NOT_STEPBIT = 0 << 1;
     static boolean constexpr LATCHSTART = 1; // 1 if the latch pulse is LOW->HIGH->LOW
     static boolean constexpr LATCHIDLE = ! LATCHSTART;
     // depends on how far the CRASH_LIMIT steps actually is
@@ -130,7 +142,7 @@ class AccelStepperShift : public BeginRun {
     static float constexpr MAX_MOTION = 0.5; // meters fixme: measure
     static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
     static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
-    
+
     // We are using 8 bit shift registers
     // And 4 bits per motor (a frame)
     // We shift out LSB 1st,
@@ -159,9 +171,10 @@ class AccelStepperShift : public BeginRun {
     const int motor_ct;
     const int latch_pin;
     // derived
-    const int total_bits;
+    const int total_used_bits;
     const int byte_ct;
     const int unused_frames; // lsb frames that aren't used (because we need byte aligned)
+    const int total_frames;
 
     AccelStepperNoted** motors; // an [] of them
 
@@ -179,11 +192,12 @@ class AccelStepperShift : public BeginRun {
     AccelStepperShift(const int motor_ct, const int latch_pin)
       : motor_ct(motor_ct)
       , latch_pin(latch_pin)
-      , total_bits( (motor_ct + extra_frames) * bits_per_frame)
+      , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
-      , byte_ct( ceil( total_bits / (sizeof(byte) * 8.0) ) )
+      , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) )
         // and fill out to byte align
-      , unused_frames( byte_ct - (total_bits / (sizeof(byte) * 8)) )
+      , unused_frames( byte_ct - (total_used_bits / (sizeof(byte) * 8)) )
+      , total_frames( byte_ct * ( (sizeof(byte) * 8 / bits_per_frame) )
     {
       // not constructing `new` members till .begin()
     }
@@ -194,17 +208,21 @@ class AccelStepperShift : public BeginRun {
 
       // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift ") << motor_ct
-             << F(" bit_vector bytes ") << byte_ct << F(" bits ") << total_bits << F(" unused frames ") << unused_frames
+             << F(" bit_vector bytes ") << byte_ct << F(" motor ct ") << motor_ct
+             << F(" extra frames ") << extra_frames
+             << F(" unused frames ") << unused_frames
+             << F(" used bits ") << total_used_bits
+             << F(" total frames ") << total_frames
              << endl;
       // I was getting corrupted data because initialization-list must be in same order as instance-vars.
-      if ( unused_frames != (byte_ct - (total_bits  / ((int)sizeof(byte) * 8) ))) {
+      if ( unused_frames != (byte_ct - (total_used_bits  / ((int)sizeof(byte) * 8) ))) {
         Serial << F("Bad unused_frames again! free ") << freeMemory() << endl;
         while (1) delay(20);
       }
       if (DEBUGBITVECTOR > 0) {
         Serial
             << F("(sizeof(byte) * 8.0) ") << (sizeof(byte) * 8.0) << endl
-            << F("byte_ct - (total_bits  / (sizeof(byte) * 8) ") << (byte_ct - (total_bits  / (sizeof(byte) * 8) )) << endl
+            << F("byte_ct - (total_used_bits  / (sizeof(byte) * 8) ") << (byte_ct - (total_used_bits  / (sizeof(byte) * 8) )) << endl
             ;
         Serial << F("Free ") << freeMemory() << endl;
         //while (1) delay(20);
@@ -275,8 +293,9 @@ class AccelStepperShift : public BeginRun {
         dir_bit |= shift_blink.state << 3;
         step_bit |= shift_blink.state << 3;
       }
-      set_frame( dir_bit_vector, unused_frames + 0, frame_mask, dir_bit );
-      set_frame( step_bit_vector, unused_frames + 0, frame_mask, step_bit );
+      // last frame:
+      set_frame( dir_bit_vector, total_frames-1, frame_mask, dir_bit );
+      set_frame( step_bit_vector, total_frames-1, frame_mask, step_bit );
 
       if (do_blink && DEBUGLOGBITVECTOR == 2) {
         Serial << F("OUT: ") << endl;
@@ -311,13 +330,13 @@ class AccelStepperShift : public BeginRun {
 
       static boolean all_done = false; // for debug messages FIXME
       static int step_count = 0; // for debug, see DEBUGSTOPAFTER
-      
+
       static Every say_pos(100);
       boolean say = say_pos();
       // if (say) Serial << F("  running @ ") << millis() << F(" ") << endl;
 
       if (DEBUGSTOPAFTER && step_count >= DEBUGSTOPAFTER) return false;
-      
+
       boolean done = true;
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
@@ -443,16 +462,16 @@ class AccelStepperShift : public BeginRun {
       memcpy( step_copy, step_bit_vector, byte_ct * sizeof(byte));
 
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
-      SPI.beginTransaction(SPISettings(6000000, LSBFIRST, SPI_MODE0));
+      SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
 
       SPI.transfer(dir_copy, motor_ct);
-
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+
       SPI.transfer(step_copy, motor_ct);
+      digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
 
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
-      digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       SPI.transfer(dir_copy, motor_ct); // this is "step pulse off"
 
       SPI.endTransaction(); // "as soon as possible"
@@ -465,13 +484,23 @@ class AccelStepperShift : public BeginRun {
       // at the [frame_i] (lsb)
       // update the bits to `value`, masked by `mask`
       // returns the byte_i
+      // byte[0] will be the furthest shift register [n]
+      // and we are doing msbfirst, so bit[0] is the nearest bit
+      // If we were 0=[0]:
       const int byte_i = (frame_i * bits_per_frame ) / (sizeof(byte) * 8);
-      const int offset = (frame_i * bits_per_frame ) % 8;
+      // But, we need 0=[n] byte, low-nybble
+      const int r_byte_i = (byte_ct - 1) - byte_i;
+      const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
+      const int offset = (frame_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=4, frame2=0, etc
       if (DEBUGBITVECTOR > 0) {
-        Serial << F("    set [") << byte_i << F("] offset ") << offset << F(" mask 0b") << _BIN(mask << offset) << F(" = ") << _BIN(value << offset) << endl;
+        Serial << F("    set frame ") << frame_i << F(" = 0b") << _BIN(value) << F(" mask ") << _BIN(mask)
+               << F(" byte[") << r_byte_i << F("]")
+               << F(" frameoffset ") << (frame_i % frames_per_byte ) << F(" <<offset ") << offset
+               << F(" == mask 0b") << _BIN(mask << offset) << F(" = ") << _BIN(value << offset) 
+               << endl;
       }
-      bit_vector[ byte_i ] = ( bit_vector[ byte_i ] & ~(mask << offset) ) | (value << offset);
-      return byte_i;
+      bit_vector[ r_byte_i ] = ( bit_vector[ r_byte_i ] & ~(mask << offset) ) | (value << offset);
+      return r_byte_i;
     }
 
     void goto_limit() {
