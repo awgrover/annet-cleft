@@ -83,7 +83,9 @@ Animation* Animation::animations[] = {
     0.25, // max amplitude
     1, // frequency
     1 // cycles
-  )
+  ),
+  NULL,NULL,NULL,NULL,NULL,NULL,
+  new AnimationFast(stepper_shift), // 9
 };
 const int Animation::animation_ct = array_size(animations);
 

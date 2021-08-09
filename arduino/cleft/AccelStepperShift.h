@@ -25,7 +25,7 @@
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
-///#define DEBUGFRAME 1
+///#define    DEBUGFRAME 1
 // Delay between each shift
 //#define DEBUGSTUPIDSLOW 500
 
@@ -358,6 +358,7 @@ class AccelStepperShift : public BeginRun {
         //    step(), if that was last step then ->run() will return false
         // Which means we will not see run()==true for the last step. thus:
         // ->run is about 4000 micros for 15 motors @ 8MHz clock
+        // got about 1800 micros @ 48mhz (so about 550 steps/sec max)
         if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
           if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
