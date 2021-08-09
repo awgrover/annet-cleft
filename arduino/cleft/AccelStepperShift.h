@@ -69,7 +69,7 @@ class AccelStepperNoted: public AccelStepper {
       // FIXME: accel of 14 isn't right? too high
       do_step = true;
     }
-} ;
+};
 
 class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
@@ -197,7 +197,7 @@ class AccelStepperShift : public BeginRun {
       , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) )
         // and fill out to byte align
       , unused_frames( byte_ct - (total_used_bits / (sizeof(byte) * 8)) )
-      , total_frames( byte_ct * ( (sizeof(byte) * 8 / bits_per_frame) )
+      , total_frames( byte_ct * ( (sizeof(byte) * 8 / bits_per_frame) ) )
     {
       // not constructing `new` members till .begin()
     }
@@ -294,8 +294,8 @@ class AccelStepperShift : public BeginRun {
         step_bit |= shift_blink.state << 3;
       }
       // last frame:
-      set_frame( dir_bit_vector, total_frames-1, frame_mask, dir_bit );
-      set_frame( step_bit_vector, total_frames-1, frame_mask, step_bit );
+      set_frame( dir_bit_vector, total_frames - 1, frame_mask, dir_bit );
+      set_frame( step_bit_vector, total_frames - 1, frame_mask, step_bit );
 
       if (do_blink && DEBUGLOGBITVECTOR == 2) {
         Serial << F("OUT: ") << endl;
@@ -496,7 +496,7 @@ class AccelStepperShift : public BeginRun {
         Serial << F("    set frame ") << frame_i << F(" = 0b") << _BIN(value) << F(" mask ") << _BIN(mask)
                << F(" byte[") << r_byte_i << F("]")
                << F(" frameoffset ") << (frame_i % frames_per_byte ) << F(" <<offset ") << offset
-               << F(" == mask 0b") << _BIN(mask << offset) << F(" = ") << _BIN(value << offset) 
+               << F(" == mask 0b") << _BIN(mask << offset) << F(" = ") << _BIN(value << offset)
                << endl;
       }
       bit_vector[ r_byte_i ] = ( bit_vector[ r_byte_i ] & ~(mask << offset) ) | (value << offset);
