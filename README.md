@@ -17,7 +17,6 @@ So:
 * The files are arduino/*/*.h, that appear in more than 1 directory.
 * If you edit one of those, you'll need to copy it to the other places (and make sure they still work there).
 * Bummer.
-* If you are on linux, you can run: `make`. It tells you if there are differences.
 
 ## cleft/
 
@@ -37,3 +36,7 @@ A visualization of cleft. You can manually move each segment.
 
 It also knows how to read the output from arduino/cleft/ and arduino/animation/
 as a visualization of the animiation.
+
+# Fritzing wiring/schematics
+
+To document the electronics.
