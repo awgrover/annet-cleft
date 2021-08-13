@@ -85,22 +85,27 @@ class AccelStepperNoted: public AccelStepper {
 class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
     //    input labeling seems confusing, all+ to +, pul- steps on transition to high.
-    // via a chain of shift-registers (2 bits per tb6600, 2 bits unused per, common enable)
-    //  74HC595
-    //  Wiring: Arduino   Shift-Register          tb6600
-    //          3.3V      16 VCC 3V must be 3v    dir+,pul+,en+
-    //          GND       8 GND
+    // via a chain of shift-registers (2 bits per tb6600, common enable)
+    //  74HC595 is serial-to-parallel: output on latch going high
+    //  74HC165 is parallel-to-serial: input on latch going low (for some time)
+    //  Wiring: Arduino   Shift-Register 74HC595  tb6600          Shift-register 74HC165
+    //          3.3V      16 VCC 3V               dir+,pul+,en+   16 Vcc
+    //          GND       8 GND                                   8 GND
     //          MOSI      14 SER
-    //          SCK       11 SRCLK
-    //          latch_pin 12 RCLK
+    //          MISO                                              10 DS (shiftout)
+    //          SCK       11 SRCLK                                
+    //          latch_pin 12 RCLK                                 1 SH/LD (latch)
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
     //                    9 q7'/data-out -> SER
     //                    15 q0                   dir-
     //                    1 q1                    pul- (step)
-    //                    (q4/q5 same to #2)
+    //                    (q2/q3 same to #2)
+    //                                                            11 A limit1
+    //                                                            13 C limit2, 3 E limit 3, 5 G limit 4
+    //                                                            15 clk-inh, pull low
     //          GND
-    //          PinX                              en- (HIGH for engage, low for free)
+    //          PinX                              en- (HIGH for engage, low for free), pull low
     //
     //  5MHz clock max at 2v, 25MHz at 5v, so... at 3v...
     //  20mA max per output (?)
