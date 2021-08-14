@@ -88,13 +88,14 @@ class AccelStepperShift : public BeginRun {
     // via a chain of shift-registers (2 bits per tb6600, common enable)
     //  74HC595 is serial-to-parallel: output on latch going high
     //  74HC165 is parallel-to-serial: input on latch going low (for some time)
+    //    we are doing MSBFIRST, so 165's bits are reversed: A is [7]
     //  Wiring: Arduino   Shift-Register 74HC595  tb6600          Shift-register 74HC165
     //          3.3V      16 VCC 3V               dir+,pul+,en+   16 Vcc
     //          GND       8 GND                                   8 GND
-    //          MOSI      14 SER
-    //          MISO                                              10 DS (shiftout)
-    //          SCK       11 SRCLK                                
-    //          latch_pin 12 RCLK                                 1 SH/LD (latch)
+    //          MOSI      14 SER (shiftin)
+    //          MISO                                              9 Qh (shiftout) (7 is ~Qh)                                              
+    //          SCK       11 SRCLK                                2 clk (15 & 2 can be swapped)
+    //          latch_pin 12 RCLK                                 1 SH/~LD (latch - read while low, high for shift)
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
     //                    9 q7'/data-out -> SER
@@ -103,7 +104,9 @@ class AccelStepperShift : public BeginRun {
     //                    (q2/q3 same to #2)
     //                                                            11 A limit1
     //                                                            13 C limit2, 3 E limit 3, 5 G limit 4
+    //                                                            11,12,13,14, 3,4,5,6 Do not let them float. pull low if not used
     //                                                            15 clk-inh, pull low
+    //                                                            10 SER shiftin daisy chain to 9 Qh, pull low on last
     //          GND
     //          PinX                              en- (HIGH for engage, low for free), pull low
     //
