@@ -83,6 +83,24 @@ class AccelStepperNoted: public AccelStepper {
       if (DEBUGPOSPERSTEP) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
       do_step = true;
     }
+
+    int time_to(int position, float acceleration ) { // OMG private var again
+      // how many microseconds
+      // just an estimate, not good for short distances
+      int distance = abs(position - currentPosition());
+      int ms = int( 1000.0 * distance / maxSpeed() );
+      //Serial << F("time_to ") << position << F(" from ") << currentPosition() << F(" dist ") << distance << F(" ms ") << ms << endl;
+      return ms ;
+
+      // d= 1/2 a t^2
+      // 2d = a t^2
+      // 2d/a = t^2
+      // sqrt(2d/a) = t
+      // BUT, we want to to accel half-way, then decl, so the `distance` is 1/2, and the time is *2
+      //int ms =  int( 2 * sqrt( distance / acceleration ) * 1000 ); // sec to msec
+      //Serial << F("time_to ") << position << F(" from ") << currentPosition() << F(" dist ") << distance << F(" @ accel ") << acceleration << F(" ms ") << ms << endl;
+      //return ms ;
+    }
 };
 
 class AccelStepperShift : public BeginRun {
@@ -170,7 +188,6 @@ class AccelStepperShift : public BeginRun {
     static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
     static float constexpr MAX_MOTION = 0.1; // meters fixme: measure
-    static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
     static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
 
     // We are using 8 bit shift registers
@@ -200,6 +217,8 @@ class AccelStepperShift : public BeginRun {
     const int latch_pin;
     const int shift_load_pin; // for parallel-to-serial
     const int enable_pin; // common enable. AccelStepper has _enablePin but private, and enable/disable does too much
+    const int fake_limit_pin;
+    const int fake_limit_pin_x;
     // derived
     const int total_used_bits;
     const int byte_ct;
@@ -218,11 +237,13 @@ class AccelStepperShift : public BeginRun {
     byte* step_bit_vector = NULL; // dir&step for each frame
     byte* limit_switch_bit_vector = NULL; // read via limit_switch(i)
 
-    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin, const int enable_pin)
+    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin, const int enable_pin, const int fake_limit_pin, const int fake_limit_pin_x)
       : motor_ct(motor_ct)
       , latch_pin(latch_pin)
       , shift_load_pin(shift_load_pin)
       , enable_pin(enable_pin)
+      , fake_limit_pin(fake_limit_pin)
+      , fake_limit_pin_x(fake_limit_pin_x)
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
       , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) ) // i.e. need a whole byte for a fraction
@@ -240,6 +261,8 @@ class AccelStepperShift : public BeginRun {
       pinMode(shift_load_pin, OUTPUT);
       digitalWrite(shift_load_pin, SH_LD_IDLE);
       pinMode(enable_pin, OUTPUT);
+      pinMode(fake_limit_pin, INPUT_PULLUP);
+      pinMode(fake_limit_pin_x, OUTPUT);
       enable();
 
       // construct now, so we can control when memory is allocated
@@ -310,7 +333,7 @@ class AccelStepperShift : public BeginRun {
       }
     }
 
-    void set_led_bar(boolean clear=false) {
+    void set_led_bar(boolean clear = false) {
       // use led-bar for various indications
       // true clears some bits
 
@@ -342,8 +365,7 @@ class AccelStepperShift : public BeginRun {
       step_bit_vector[ 0 ] = led_bits;
 
       if ( did_heartbeat ) {
-        // if (DEBUGLOGBITVECTOR == 2) {
-        {
+        if (DEBUGLOGBITVECTOR == 2) {
           Serial << F("OUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
           dump_bit_vectors();
           //while (1) {};
@@ -623,72 +645,87 @@ class AccelStepperShift : public BeginRun {
     void goto_limit() {
       // move all motors to the limit switch
       // skip this if no limit switches
+      boolean doing_fake_limit = false; // fake all limit switch if jumper on FAKE_LIMIT_PIN
 
       Serial << F("Goto LIMITUP") << endl;
 
-      int distance;
+      constexpr float our_acceleration = 400.0f;
+      constexpr int distance_drop = - (CRASH_LIMIT + CRASH_LIMIT / 2);
+      static_assert(distance_drop < 2 * MAX_MOTION * STEPS_METER, "Drop before uplimit was > MAX_MOTION");
       Timer too_long(1);
 
       heartbeat( NEO_STATE_UPLIMIT );
 
-      distance = - (CRASH_LIMIT + CRASH_LIMIT / 2);
       // move well below the limit switch
       for (int i = 0; i < motor_ct; i++) {
-        motors[i]->move( distance );
+        motors[i]->setMaxSpeed( 100 ); // slow
+        motors[i]->setAcceleration( our_acceleration );
+        motors[i]->move( distance_drop );
       }
-      too_long.reset(5000);
+      too_long.reset( int( motors[0]->time_to( distance_drop, our_acceleration) * 1.5) );
       while (run() && ! too_long()) {
         heartbeat( NEO_STATE_UPLIMIT );
         finish_loop(); // resets do_step() so we can detect all-done
       }
       if (too_long.after()) {
-        Serial << F("FAULT: too long to run ") << distance << endl;
+        Serial << F("FAULT: too long to run ") << distance_drop << endl;
+        fault();
+      }
+      Serial << F("Drop below limit: done") << endl;
+
+      if ( fake_limit_pin && ! digitalRead(fake_limit_pin) ) {
+        doing_fake_limit = true;
+        Serial << F("FIXME NOT LIMITING") << endl;
+      }
+
+
+      // move up till limit switch
+      constexpr int distance_to_limit = 2 * MAX_MOTION * STEPS_METER;
+      for (int i = 0; i < motor_ct; i++) {
+        motors[i]->move( distance_to_limit ); // 24 revs should be about 2 meters
+      }
+      too_long.reset( int( motors[0]->time_to( distance_to_limit, our_acceleration) * 1.5) ); // 2.5 secs / rev
+      Timer fake_limit( int( motors[0]->time_to( distance_to_limit, our_acceleration) ) );
+      while (run() && ! too_long()) {
+        heartbeat( NEO_STATE_UPLIMIT );
+        finish_loop(); // resets do_step() so we can detect all-done
+
+        if (doing_fake_limit && fake_limit() ) break;
+      }
+      if (too_long.after()) {
+        Serial << F("FAULT: too long to run ") << distance_to_limit << endl;
+        fault();
+      }
+      Serial << F("All limits hit: done") << endl;
+
+      boolean hit_limit = true;
+      for (int i = 0; i < motor_ct; i++) {
+        hit_limit &= doing_fake_limit || motors[i]->at_limit;
+      }
+      if (!hit_limit) {
+        Serial << F("FAULT: didn't hit limit ") << distance_to_limit << endl;
         fault();
       }
 
-      Serial << F("FIXME NOT LIMITING") << endl;
-      /*
-        // move up till limit switch
-        distance = 24 * 200;
-        for (int i = 0; i < motor_ct; i++) {
-        motors[i]->move( distance ); // 24 revs should be about 2 meters
-        }
-        too_long.reset( 1000 * 2 * (distance / 200 ) ); // 2.5 secs / rev
-        while (run() && ! too_long()) ;
-        if (too_long.after()) {
-        Serial << F("FAULT: too long to run ") << distance << endl;
-        while (1);
-        }
-        boolean hit_limit = true;
-        for (int i = 0; i < motor_ct; i++) {
-        hit_limit &= motors[i]->at_limit;
-        }
-        if (!hit_limit) {
-        Serial << F("FAULT: didn't hit limit ") << distance << endl;
-        while (1);
-        }
-
-        // all motors at LIMITUP
-        // reset to 0 and cleanup
-        for (int i = 0; i < motor_ct; i++) {
-        long stopped_at = motors[i]->currentPosition();
-        motors[i]->setCurrentPosition( stopped_at - motors[i]->at_limit_pos );
-        motors[i]->at_limit_pos = 0; // nobody is relying on this going to 0
-        motors[i]->moveTo(- 2 * 200); // need to get below switch
-        }
-        too_long.reset( 1000);
-        while (run() && ! too_long()) ;
-        if (too_long.after()) {
+      // all motors at LIMITUP
+      // reset to 0 and cleanup
+      constexpr int distance_to_zero = (10 + MAX_MOTION * STEPS_METER);
+      for (int i = 0; i < motor_ct; i++) {
+        long stopped_at = motors[i]->currentPosition(); // we may have gone past a bit
+        motors[i]->setCurrentPosition( distance_to_zero + stopped_at - motors[i]->at_limit_pos );
+        motors[i]->at_limit_pos = distance_to_zero; // nobody is relying on this going to 0
+        motors[i]->moveTo( 0 ); // limit swith is ~ MAX_MOTION * STEPS_METER
+      }
+      too_long.reset(  int( motors[0]->time_to( 0, our_acceleration) * 1.5)  );
+      while (run() && ! too_long()) {
+        heartbeat( NEO_STATE_UPLIMIT );
+        finish_loop(); // resets do_step() so we can detect all-done
+      }
+      if (too_long.after()) {
         Serial << F("FAULT: too long to runto ") << 0 << endl;
         while (1);
-        }
-      */
-      for (int i = 0; i < motor_ct; i++) {
-        motors[i]->at_limit = false; // noone else is going to reset this! fixme...
-        motors[i]->moveTo( HOME );
       }
-
-      Serial << F("Ran to LIMITUP") << endl;
+      Serial << F("Move to HOME: done") << endl;
     }
 
     void fault() {

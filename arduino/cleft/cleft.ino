@@ -68,7 +68,7 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 
 // up here so available to the #includes, which is ugly
 Adafruit_NeoPixel builtin_neo(1,  40, NEO_GRB + NEO_KHZ800);
-const int bob=1;
+// indications for builtin neo
 const uint32_t NEO_STATE_SETUP = Adafruit_NeoPixel::Color(255, 255, 0); // Yellow
 const uint32_t NEO_STATE_FAULT = Adafruit_NeoPixel::Color(255, 0, 0); // Red
 const uint32_t NEO_OFF = Adafruit_NeoPixel::Color(0, 0, 0); // off
@@ -97,12 +97,14 @@ constexpr int MOTOR_CT = 1; // 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
+constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
+constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
 
 // SYSTEMS
 // We run them via systems[] (below)
 // We need to explicitly refer to a few, so need explicit name
 // When testing/developing, you can set these to NULL to skip using them
-AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN);
+AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN, FAKE_LIMIT_PIN, FAKE_LIMIT_PIN_X);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
 AnimationWave1* animation = new AnimationWave1( // moving sine wave
   stepper_shift,
