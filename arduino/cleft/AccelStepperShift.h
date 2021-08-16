@@ -3,7 +3,7 @@
 #include <SPI.h>
 
 #include <AccelStepper.h> // Mike McCauley <mikem@airspayce.com>
-#include <Streaming.h>
+#include <Streaming.h> // Mikal Hart <mikal@arduiniana.org>
 
 #include "freememory.h"
 #include "every.h"
@@ -54,9 +54,11 @@
 
 class AccelStepperNoted: public AccelStepper {
     // This class just notes that a step is requested.
-    // A user of the instance should reset `do_step` once it is read
+    // A user of the instance should reset `do_step` once it is read.
     // Need to call the usual .runX(), and other .setX() as normal.
-    // NB: the last step() will have .run() return false, so use do_step().
+    // NB: the last step() will have .run() return false, so use do_step():
+    //  amotor.run();
+    //  if (amotor.do_step) { handle it, set do_step=false ...}
 
   public:
     inline boolean direction() {
@@ -66,17 +68,18 @@ class AccelStepperNoted: public AccelStepper {
     const int motor_i; // my index
 
     boolean do_step; // true == do a step, reset after this is used
-    boolean at_limit = false; // triggered by limit_switch detection
+    boolean at_limit = false; // triggered by limit_switch detection during home-to-up-limit
     int at_limit_pos = 0; // where the limit switch was last triggered
 
+    // the super's constructor causes no use of pins
     AccelStepperNoted(int i) : AccelStepper(&dumyStep, &dumyStep) , motor_i(i), do_step(false) {}
     static void dumyStep() {}
 
     void step(long astep) {
-      // step is just current position, not relevant for 1-pin mode
+      // step is just current position
       // we just note that a step is requested
-
       (void)(astep); // Unused
+
       if (DEBUGPOSPERSTEP) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
       do_step = true;
     }
@@ -84,10 +87,11 @@ class AccelStepperNoted: public AccelStepper {
 
 class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
-    //    input labeling seems confusing, all+ to +, pul- steps on transition to high.
+    //    input labeling seems confusing, all "+" to +, pul- steps on transition to high.
     // via a chain of shift-registers (2 bits per tb6600, common enable)
     //  74HC595 is serial-to-parallel: output on latch going high
-    //  74HC165 is parallel-to-serial: input on latch going low (for some time)
+    //  74HC165 is parallel-to-serial: input on latch going low
+    //    nb: opposite sense of latch from the 595
     //    we are doing MSBFIRST, so 165's bits are reversed: A is [7]
     //  Wiring: Arduino   Shift-Register 74HC595  tb6600          Shift-register 74HC165
     //          3.3V      16 VCC 3V               dir+,pul+,en+   16 Vcc
@@ -95,7 +99,8 @@ class AccelStepperShift : public BeginRun {
     //          MOSI      14 SER (shiftin)
     //          MISO                                              9 Qh (shiftout) (7 is ~Qh)
     //          SCK       11 SRCLK                                2 clk (15 & 2 can be swapped)
-    //          latch_pin 12 RCLK                                 1 SH/~LD (latch - read while low, high for shift)
+    //          latch_pin 12 RCLK
+    //          load-pin                                          1 SH/~LD (latch - read on low, high for shift)
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
     //                    9 q7'/data-out -> SER
@@ -108,7 +113,7 @@ class AccelStepperShift : public BeginRun {
     //                                                            15 clk-inh, pull low
     //                                                            10 SER shiftin daisy chain to 9 Qh, pull low on last
     //          GND
-    //          PinX                              en- (HIGH for engage, low for free), pull low
+    //          motor-enable                      en- (HIGH for engage, low for free), pull low
     //
     //  5MHz clock max at 2v, 25MHz at 5v, so... at 3v...
     //  20mA max per output (?)
@@ -129,6 +134,7 @@ class AccelStepperShift : public BeginRun {
     // * has run() to run all motors
     // * converts the "noted" steps into bit-vectors for fast spi-shift out
     //    to drive the tb6600's
+    // * reads the limit switches
 
     // driver chip: https://toshiba.semicon-storage.com/info/docget.jsp?did=14683&prodName=TB6600HG
     //"common anode"
@@ -161,24 +167,22 @@ class AccelStepperShift : public BeginRun {
     // depends on how far the CRASH_LIMIT steps actually is
     static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
-    static float constexpr MAX_MOTION = 0.5; // meters fixme: measure
+    static float constexpr MAX_MOTION = 0.1; // meters fixme: measure
     static int constexpr HOME = - MAX_MOTION * STEPS_METER; // meters
     static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
 
     // We are using 8 bit shift registers
-    // And 4 bits per motor (a frame)
-    // We shift out LSB 1st,
-    // so our bit-vector[0] is the first shifted out (farthest shift-register. lsb)
-    // and shift-register[i].bit[7] is our frame-bit[0] ?
-    // so,
+    // And 2 bits per motor (a frame)
+    // We shift out MSB 1st, which works for the output shift-register
+    //  but is backwards for the input shift-register.
+    // so our bit-vector[0] is the first shifted out (farthest shift-register)
     //  arduino
     //  -> ...
     //  -> motor[1]:motor[0]
-    //  -> extra_frame[1]:extra_frame[0]
-    //    led-bar goes here
+    //  -> led-bar goes here "extra frame"
     //  -> unused_frame[1]:unused_frame[0]... if any
     //  end-of-chain
-    static constexpr int bits_per_frame = 4; // dir-,pul-, 2 unused ("en" is common)
+    static constexpr int bits_per_frame = 2; // dir-,pul-, ("en" is common)
     static constexpr int extra_frames = 8 / bits_per_frame; // the led-bar: 8 leds
     // cf unused_frames. use frame_i = unused_frames as index of 1st "extra frame"
     static constexpr int used_bits = 2; // dir-,pul-, 2 unused ("en" is common)
@@ -199,18 +203,14 @@ class AccelStepperShift : public BeginRun {
     const int unused_frames; // lsb frames that aren't used (because we need byte aligned)
     const int total_frames;
 
-    AccelStepperNoted** motors; // an [] of them
+    AccelStepperNoted** motors; // an [motor_ct] of them
 
     // frame order is lsb:
     // unused-frames, led-bar, motor0 ... motorN
     // an [] of bytes for the shift-register bits, for per-motor-frame
     byte* dir_bit_vector = NULL; // dir & step=0 for each frame
     byte* step_bit_vector = NULL; // dir&step for each frame
-    byte* limit_switch_bit_vector = NULL;
-    // state of each limit switch, set after construct, optional
-    // somebody would need to supply this vector [motor_ct]
-    // and set an entry to true if a limit switch was on
-    // e.g. use the status[] from LimitSwitch class
+    byte* limit_switch_bit_vector = NULL; // read via limit_switch(i)
 
     AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin)
       : motor_ct(motor_ct)
@@ -218,7 +218,7 @@ class AccelStepperShift : public BeginRun {
       , shift_load_pin(shift_load_pin)
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
-      , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) )
+      , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) ) // i.e. need a whole byte for a fraction
         // and fill out to byte align
       , unused_frames( byte_ct - (total_used_bits / (sizeof(byte) * 8)) )
       , total_frames( byte_ct * ( (sizeof(byte) * 8 / bits_per_frame) ) )
@@ -226,11 +226,14 @@ class AccelStepperShift : public BeginRun {
       // not constructing `new` members till .begin()
     }
 
+    // FIXME: add an enable/disable call, setEnablePin() ? and enableOutputs()? disableOutputs() ?
+
     void begin() {
+      // our 2 "latches"
       pinMode(latch_pin, OUTPUT);
       digitalWrite(latch_pin, LATCHIDLE);
       pinMode(shift_load_pin, OUTPUT);
-      digitalWrite(latch_pin, SH_LD_IDLE);
+      digitalWrite(shift_load_pin, SH_LD_IDLE);
 
       // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift ") << motor_ct
@@ -273,14 +276,11 @@ class AccelStepperShift : public BeginRun {
         // to 200 steps/sec in 0.1 sec
         // targetspeed = 1/2 * A * 0.1
         // (targetspeed*2)/0.1
-        constexpr float time_to_max = 0.1;
+        constexpr float time_to_max = 0.25;
         constexpr int acceleration = (MAX_SPEED * 2) / time_to_max;
         motors[i]->setAcceleration(acceleration);
         motors[i]->setMaxSpeed(MAX_SPEED); // might be limited by maximum loop speed
       }
-
-      // setup SPI. not nice. should be global in main setup()
-      SPI.begin();
     }
 
     boolean run() {
@@ -371,11 +371,11 @@ class AccelStepperShift : public BeginRun {
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
 
+        // ->run is about 4000 micros for 15 motors @ 8MHz clock
+        // got about 1800 micros @ 48mhz (so about 550 steps/sec max)
         // NB. AccelStepper thinks the protocol is:
         //    step(), if that was last step then ->run() will return false
         // Which means we will not see run()==true for the last step. thus:
-        // ->run is about 4000 micros for 15 motors @ 8MHz clock
-        // got about 1800 micros @ 48mhz (so about 550 steps/sec max)
         if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
           if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
@@ -404,7 +404,7 @@ class AccelStepperShift : public BeginRun {
     }
 
     void collect_bit(int i) { // motor_i
-      // collect the bits
+      // collect the bits for "dir" and "step" bit_vectors
       // about 100micros for all 15 at 8MHz 32u4
 
       int frame_i = i;

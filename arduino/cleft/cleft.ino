@@ -19,6 +19,7 @@
     one arduino Zero equivalent (48MHz): adafruit Metro M0 Express
     15 motors, with TB6600 controllers, and limit switches
     a chain of shift registers driving the controllers (SPI)
+    a chain of (in) shift-registers to read the limit switches (SPI at same time)
     3 IR cameras (I2C)
     Several LED indicators
     AccelStepper to run the motors (but capturing as bit-vector for SPI)
@@ -84,7 +85,7 @@ Animation* Animation::animations[] = {
     1, // frequency
     1 // cycles
   ),
-  NULL,NULL,NULL,NULL,NULL,NULL,
+  NULL, NULL, NULL, NULL, NULL, NULL,
   new AnimationFast(stepper_shift), // 9
 };
 const int Animation::animation_ct = array_size(animations);
@@ -122,6 +123,8 @@ void setup() {
   Serial << F("After Serial.begin ") << freeMemory() << endl;
   Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
 
+  // allow other spi users
+  SPI.begin();
 
   // Each main object
   // We `new` them so we can more easily see memory usage in console
