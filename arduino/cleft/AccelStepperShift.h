@@ -55,7 +55,8 @@
 class AccelStepperNoted: public AccelStepper {
     // This class just notes that a step is requested.
     // A user of the instance should reset `do_step` once it is read
-    // Need to call the usual .runX(), and other .setX() as normal
+    // Need to call the usual .runX(), and other .setX() as normal.
+    // NB: the last step() will have .run() return false, so use do_step().
 
   public:
     inline boolean direction() {
@@ -77,7 +78,6 @@ class AccelStepperNoted: public AccelStepper {
 
       (void)(astep); // Unused
       if (DEBUGPOSPERSTEP) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
-      // FIXME: accel of 14 isn't right? too high
       do_step = true;
     }
 };
