@@ -185,7 +185,7 @@ class AccelStepperShift : public BeginRun {
     //  -> unused_frame[1]:unused_frame[0]... if any
     //  end-of-chain
     static constexpr int bits_per_frame = 2; // dir-,pul-, ("en" is common)
-    static constexpr int extra_frames = 8 / bits_per_frame; // the led-bar: 8 leds
+    static constexpr int extra_frames = 8 / bits_per_frame; // the led-bar: 1 whole shift-register
     // cf unused_frames. use frame_i = unused_frames as index of 1st "extra frame"
     static constexpr int used_bits = 2; // dir-,pul-, 2 unused ("en" is common)
     static constexpr byte frame_mask = (1 << bits_per_frame) - 1; // just the bits of the frame, i.e. n bits
@@ -309,7 +309,7 @@ class AccelStepperShift : public BeginRun {
     void set_led_bar() {
       // use led-bar for various indications
 
-      static Every::Toggle spi_heartbeat(300); // "blink" one of the leds NB: class level!
+      static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
 
       // shift register bits, we numbered the led from 9...0 in the comment
       static constexpr int heartbeat_bit = 7;
@@ -319,10 +319,12 @@ class AccelStepperShift : public BeginRun {
 
       byte led_bits = 0;
 
-      if ( spi_heartbeat() ) {
-        led_bits |= spi_heartbeat.state << heartbeat_bit;
-        did_heartbeat = true;
-      }
+
+      spi_heartbeat();
+      led_bits |= spi_heartbeat.state << heartbeat_bit;
+      did_heartbeat = true;
+      Serial << F("xOUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
+
 
       if ( recent_step.running ) {
         led_bits |= 1 << recent_step_bit;
@@ -336,7 +338,7 @@ class AccelStepperShift : public BeginRun {
       dir_bit_vector[ 0 ] = led_bits;
       step_bit_vector[ 0 ] = led_bits;
 
-      if ( did_heartbeat ) {
+      if ( 1 || did_heartbeat ) {
         // if (DEBUGLOGBITVECTOR == 2) {
         {
           Serial << F("OUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
