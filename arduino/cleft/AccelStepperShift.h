@@ -530,6 +530,10 @@ class AccelStepperShift : public BeginRun {
       if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(limit_switch_bit_vector);
       SPI.transfer(limit_switch_bit_vector, byte_ct);
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+      if (DEBUGLOGBITVECTOR == 3) {
+        Serial << F("Limit:") << endl;
+        dump_bit_vector(limit_switch_bit_vector);
+      }
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
@@ -539,6 +543,7 @@ class AccelStepperShift : public BeginRun {
       SPI.endTransaction(); // "as soon as possible"
       // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+
       if (DEBUGSTUPIDSLOW) {
         Serial << F("--- ") << (millis() - start) << endl;
         delay(DEBUGSTUPIDSLOW);
