@@ -208,8 +208,9 @@ class AccelStepperShift : public BeginRun {
 
     AccelStepperNoted** motors; // an [motor_ct] of them
 
-    Timer recent_step = Timer(200);
-    
+    Timer recent_step = Timer(200, false);
+    Timer recent_limit = Timer(200, false);
+
     // frame order is lsb:
     // unused-frames, led-bar, motor0 ... motorN
     // an [] of bytes for the shift-register bits, for per-motor-frame
@@ -309,10 +310,11 @@ class AccelStepperShift : public BeginRun {
       // use led-bar for various indications
 
       static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
-      
+
       // shift register bits, we numbered the led from 9...0 in the comment
-      static constexpr int heartbeat_bit = 0;
+      static constexpr int heartbeat_bit = 7;
       static constexpr int recent_step_bit = 1;
+      static constexpr int recent_limit_bit = 2;
 
       byte led_bits = 0;
 
@@ -323,7 +325,11 @@ class AccelStepperShift : public BeginRun {
       if ( recent_step.running ) {
         led_bits |= 1 << recent_step_bit;
       }
-      
+
+      if ( recent_limit.running ) {
+        led_bits |= 1 << recent_limit_bit;
+      }
+
       // last frame: repeat because we send both bit-vectors
       dir_bit_vector[total_frames - 1 ] = led_bits;
       step_bit_vector[total_frames - 1 ] = led_bits;
@@ -341,6 +347,9 @@ class AccelStepperShift : public BeginRun {
       // this add about 50micros to the loop
       const boolean hit_limit = motors[motor_i]->direction() && limit_switch(motor_i);
       if (hit_limit) {
+
+        recent_limit.reset();
+
         if ( ! motors[motor_i]->at_limit) { // and not already at limit
 
           // flag that we are atlimit or above
@@ -403,13 +412,15 @@ class AccelStepperShift : public BeginRun {
       all_done = done;
       //if (!all_done) Serial << F("Done ? ") << all_done << endl;
 
+      if (! done) recent_step.reset();
+
       return ! done;
     }
 
     void enable() {
       digitalWrite(enable_pin, ENABLE);
     }
-    
+
     void disable() {
       digitalWrite(enable_pin, DISABLE);
     }
@@ -608,16 +619,20 @@ class AccelStepperShift : public BeginRun {
       int distance;
       Timer too_long(1);
 
+      heartbeat( NEO_STATE_UPLIMIT );
+
       distance = - (CRASH_LIMIT + CRASH_LIMIT / 2);
       // move well below the limit switch
       for (int i = 0; i < motor_ct; i++) {
         motors[i]->move( distance );
       }
       too_long.reset(5000);
-      while (run() && ! too_long()) ;
+      while (run() && ! too_long()) { 
+        heartbeat( NEO_STATE_UPLIMIT ); 
+        }
       if (too_long.after()) {
         Serial << F("FAULT: too long to run ") << distance << endl;
-        while (1);
+        fault();
       }
       Serial << F("FIXME NOT LIMITING") << endl;
       /*
@@ -662,6 +677,13 @@ class AccelStepperShift : public BeginRun {
       }
 
       Serial << F("Ran to LIMITUP") << endl;
+    }
+
+    void fault() {
+      disable();
+      builtin_neo.setPixelColor(0, NEO_STATE_FAULT );
+      builtin_neo.show();
+      while(1); // and lock up
     }
 };
 

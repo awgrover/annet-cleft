@@ -342,7 +342,7 @@ class Timer { // True, once, after n millis
     boolean running;
     unsigned long interval;
 
-    Timer(unsigned long interval) : last(millis()), running(true), interval(interval) {}
+    Timer(unsigned long interval, boolean run=true) : last(millis()), running(run), interval(interval) {}
 
     virtual boolean operator()() {
       if ( running ) {

@@ -34,16 +34,30 @@
         bit   assignment                          Desc
         9     Vcc "power"                         Should be on == power
         8     common-enable                       off on power-up, on at setup() and stays on
-        7     spi-heartbeat (shiftreg[A]-15)      blink every 200ms, indicates spi.transfer loop being called
+        7     spi-heartbeat (shiftreg[H]-7)       blink every 200ms, indicates spi.transfer loop being called
         6     SCK                                 looks always on after spi.begin (actually blinks off, but imperceptible)
         5     latch-out                           very fast flash on each spi-transfer
         4     latch-in                            looks always on after spi.begin (actually blinks off, but imperceptible)
         3     recent step (shiftreg[B]-1)         on for 200ms if any motor step'd
         2     recent limit (shiftreg[C]-2)        on for 200ms if any limit switch was on
-        1     unused
-        0     unused
+        1     spi-heartbeat (shiftreg[H']-9)      complementary blink every 200ms, indicates spi.transfer loop being called
+        0     Vcc "power"                         Should be on == power
+
+      Built-in Neopixel
+        Green         power-on (def)
+        Yellow        setup()
+        Blink Orange  doing uplimit()
+        Blink Green   loop'ing() : heartbeat
+        Red           fault (past limit, or hit limit during animation)
+
+      Neopixel 6 (center w/pentagon 5)
+        spi-heartbeat -- center
+        clockwise from top
+        sensor
+        animation state
 */
 
+#include <Adafruit_NeoPixel.h> // Adafruit
 #include <AccelStepper.h> // Mike McCauley <mikem@airspayce.com>
 #include <Streaming.h> // Mikal Hart <mikal@arduiniana.org>
 // Not in my version of streaming, for F("") strings:
@@ -51,6 +65,16 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
   obj.print(arg);
   return obj;
 }
+
+// up here so available to the #includes, which is ugly
+Adafruit_NeoPixel builtin_neo(1,  40, NEO_GRB + NEO_KHZ800);
+const int bob=1;
+const uint32_t NEO_STATE_SETUP = Adafruit_NeoPixel::Color(255, 255, 0); // Yellow
+const uint32_t NEO_STATE_FAULT = Adafruit_NeoPixel::Color(255, 0, 0); // Red
+const uint32_t NEO_OFF = Adafruit_NeoPixel::Color(0, 0, 0); // off
+const uint32_t NEO_STATE_LOOPING = Adafruit_NeoPixel::Color(0, 255, 0); // Green (blink)
+const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Orange (blink)
+
 
 // NB: a #include list is auto-generated of extant .h files
 //  and it is alphabetical, so this order is not relevant
@@ -74,6 +98,8 @@ constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
+
+
 
 // SYSTEMS
 // We run them via systems[] (below)
@@ -118,17 +144,26 @@ BeginRun* systems[] = {
 };
 
 void setup() {
-  // Integrated USB chips have trouble uploading sometimes
-  // (especially if you corrupt memory, or go into a tight loop)
-  // So, give some time at startup to notice re-upload
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  delay(2000); // allow uploading when cpu gets screwed
-  digitalWrite(LED_BUILTIN, LOW);
-
   // We want to note memory
   const int base_memory = freeMemory();
   int last_free = base_memory;
+
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  builtin_neo.begin();
+  // weirdly, the first set doesn't show
+  builtin_neo.setBrightness(60); // too bright!
+  builtin_neo.setPixelColor(0, 0, 0, 255) ; // NEO_STATE_SETUP );
+  builtin_neo.show();
+  builtin_neo.setPixelColor(0, NEO_STATE_SETUP );
+  builtin_neo.show();
+
+  // Integrated USB chips have trouble uploading sometimes
+  // (especially if you corrupt memory, or go into a tight loop)
+  // So, give some time at startup to notice re-upload
+  delay(2000); // allow uploading when cpu gets screwed
+  digitalWrite(LED_BUILTIN, LOW);
 
   Serial.begin(115200); while (!Serial) {}
   Serial << endl;
@@ -170,6 +205,8 @@ void loop() {
   static unsigned long last_elapsed = 0;
   const unsigned long last_micros = micros(); // top of loop
 
+  heartbeat(NEO_STATE_LOOPING);
+  
   // Run each object/module/system
   for (BeginRun* a_system : systems) {
     if (! a_system) continue; // skip NULLs
@@ -201,6 +238,14 @@ void loop() {
   }
 }
 
+void heartbeat(const uint32_t color) {
+  static Every::Toggle heartbeat(200);
+  if ( heartbeat() ) {
+    builtin_neo.setPixelColor(0, heartbeat.state ? NEO_OFF : color );
+    builtin_neo.show();
+  }
+}
+  
 /*
 
   void loop() {
