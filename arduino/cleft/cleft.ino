@@ -139,7 +139,6 @@ void setup() {
   if (stepper_shift) stepper_shift->goto_limit();
 
   if (DEBUGMOVETEST) {
-    //  move test
     Animation::current_animation->state = Animation::Off;
   }
 
