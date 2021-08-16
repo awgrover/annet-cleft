@@ -296,6 +296,10 @@ class AccelStepperShift : public BeginRun {
         shift_out();
         return true;
       }
+      else if ( recent_step() || recent_limit() ) {
+        set_led_bar(true);
+        shift_out();
+      }
       return false;
     }
 
@@ -306,8 +310,9 @@ class AccelStepperShift : public BeginRun {
       }
     }
 
-    void set_led_bar() {
+    void set_led_bar(boolean clear=false) {
       // use led-bar for various indications
+      // true clears some bits
 
       static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
 
@@ -320,25 +325,23 @@ class AccelStepperShift : public BeginRun {
       byte led_bits = 0;
 
 
-      spi_heartbeat();
-      led_bits |= spi_heartbeat.state << heartbeat_bit;
-      did_heartbeat = true;
-      Serial << F("xOUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
+      did_heartbeat = spi_heartbeat(); // have to call () to cause .state to change
+      led_bits |= (clear ? 0 : spi_heartbeat.state ) << heartbeat_bit;
 
 
       if ( recent_step.running ) {
-        led_bits |= 1 << recent_step_bit;
+        led_bits |= (clear ? 0 : 1) << recent_step_bit;
       }
 
       if ( recent_limit.running ) {
-        led_bits |= 1 << recent_limit_bit;
+        led_bits |= (clear ? 0 : 1) << recent_limit_bit;
       }
 
       // last frame: repeat because we send both bit-vectors
       dir_bit_vector[ 0 ] = led_bits;
       step_bit_vector[ 0 ] = led_bits;
 
-      if ( 1 || did_heartbeat ) {
+      if ( did_heartbeat ) {
         // if (DEBUGLOGBITVECTOR == 2) {
         {
           Serial << F("OUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
@@ -636,11 +639,13 @@ class AccelStepperShift : public BeginRun {
       too_long.reset(5000);
       while (run() && ! too_long()) {
         heartbeat( NEO_STATE_UPLIMIT );
+        finish_loop(); // resets do_step() so we can detect all-done
       }
       if (too_long.after()) {
         Serial << F("FAULT: too long to run ") << distance << endl;
         fault();
       }
+
       Serial << F("FIXME NOT LIMITING") << endl;
       /*
         // move up till limit switch

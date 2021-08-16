@@ -40,7 +40,7 @@
         4     latch-in                            looks always on after spi.begin (actually blinks off, but imperceptible)
         3     recent step (shiftreg[B]-1)         on for 200ms if any motor step'd
         2     recent limit (shiftreg[C]-2)        on for 200ms if any limit switch was on
-        1     spi-heartbeat (shiftreg[H']-9)      complementary blink every 200ms, indicates spi.transfer loop being called
+        1     spi-heartbeat (shiftreg[H']-9)      QH' (serial out) = H, slightly out of phase, blink every 200ms, indicates spi.transfer loop being called
         0     Vcc "power"                         Should be on == power
 
       Built-in Neopixel
@@ -150,7 +150,7 @@ void setup() {
 
   builtin_neo.begin();
   // weirdly, the first set doesn't show
-  builtin_neo.setBrightness(60); // too bright!
+  builtin_neo.setBrightness(5); // too bright!
   builtin_neo.setPixelColor(0, 0, 0, 255) ; // NEO_STATE_SETUP );
   builtin_neo.show();
   builtin_neo.setPixelColor(0, NEO_STATE_SETUP );
