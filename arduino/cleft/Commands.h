@@ -5,6 +5,8 @@
 #include "AnimationWave1.h"
 
 class Commands : public BeginRun {
+  // Respond to commands on the serial port, mostly for demo & debug
+  
   public:
     AccelStepperShift* all_motors;
 
