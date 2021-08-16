@@ -27,6 +27,21 @@
     An interaction module that interprets the cameras and decides on animation sequences.
     Lots of wiring & connectors
 
+
+    Wiring
+      shift registers (in/out), enable, : see AccelStepperShift.h
+      LED-Bar, end of (out) shift-register chain
+        bit   assignment                          Desc
+        9     Vcc "power"                         Should be on == power
+        8     common-enable                       off on power-up, on at setup() and stays on
+        7     spi-heartbeat (shiftreg[A]-15)      blink every 200ms, indicates spi.transfer loop being called
+        6     SCK                                 looks always on after spi.begin (actually blinks off, but imperceptible)
+        5     latch-out                           very fast flash on each spi-transfer
+        4     latch-in                            looks always on after spi.begin (actually blinks off, but imperceptible)
+        3     recent step (shiftreg[B]-1)         on for 200ms if any motor step'd
+        2     recent limit (shiftreg[C]-2)        on for 200ms if any limit switch was on
+        1     unused
+        0     unused
 */
 
 #include <AccelStepper.h> // Mike McCauley <mikem@airspayce.com>
@@ -42,13 +57,14 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 //  and, in fact, is redundant for arduino-ide
 #include "freememory.h"
 #include "every.h"
+#include "array_size.h"
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
 #include "Commands.h"
 
-// if true: no initial movement, +|- move up 2, down 2
+// if true: no initial move-to-uplimit, instead +|- move up 2, down 2
 #define DEBUGMOVETEST 1
 #ifndef DEBUGMOVETEST
 #define DEBUGMOVETEST 0
@@ -57,12 +73,13 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
+constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
 
 // SYSTEMS
 // We run them via systems[] (below)
 // We need to explicitly refer to a few, so need explicit name
 // When testing/developing, you can set these to NULL to skip using them
-AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN);
+AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
 AnimationWave1* animation = new AnimationWave1( // moving sine wave
   stepper_shift,

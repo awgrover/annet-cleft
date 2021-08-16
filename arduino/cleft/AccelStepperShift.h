@@ -104,9 +104,9 @@ class AccelStepperShift : public BeginRun {
     //                    13 ~OE pull low
     //                    10 ~SRCLR pull high
     //                    9 q7'/data-out -> SER
-    //                    15 q0                   dir-
-    //                    1 q1                    pul- (step)
-    //                    (q2/q3 same to #2)
+    //                    15 q0                   motor0 dir-
+    //                    1 q1                    motor0 pul- (step)
+    //                    q2/q3                   motor1, ...
     //                                                            11 A limit1
     //                                                            13 C limit2, 3 E limit 3, 5 G limit 4
     //                                                            11,12,13,14, 3,4,5,6 Do not let them float. pull low if not used
@@ -159,10 +159,12 @@ class AccelStepperShift : public BeginRun {
     static byte constexpr REV_DIRBIT = 0 << 0;
     static byte constexpr STEPBIT = 1 << 1;
     static byte constexpr NOT_STEPBIT = 0 << 1;
-    static boolean constexpr LATCHSTART = 1; // 1 if the latch pulse is LOW->HIGH->LOW
+    static boolean constexpr LATCHSTART = HIGH; // 1 if the latch pulse is LOW->HIGH->LOW
     static boolean constexpr LATCHIDLE = ! LATCHSTART;
-    static boolean constexpr SH_LD_IDLE = 1; // allow shift while high, load on low
+    static boolean constexpr SH_LD_IDLE = HIGH; // allow shift while high, load on low
     static boolean constexpr SH_LD_LOAD = !SH_LD_IDLE; // allow shift while high, load on low
+    static boolean constexpr ENABLE = HIGH;
+    static boolean constexpr DISABLE = !ENABLE;
 
     // depends on how far the CRASH_LIMIT steps actually is
     static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
@@ -197,6 +199,7 @@ class AccelStepperShift : public BeginRun {
     const int motor_ct;
     const int latch_pin;
     const int shift_load_pin; // for parallel-to-serial
+    const int enable_pin; // common enable. AccelStepper has _enablePin but private, and enable/disable does too much
     // derived
     const int total_used_bits;
     const int byte_ct;
@@ -205,6 +208,8 @@ class AccelStepperShift : public BeginRun {
 
     AccelStepperNoted** motors; // an [motor_ct] of them
 
+    Timer recent_step = Timer(200);
+    
     // frame order is lsb:
     // unused-frames, led-bar, motor0 ... motorN
     // an [] of bytes for the shift-register bits, for per-motor-frame
@@ -212,10 +217,11 @@ class AccelStepperShift : public BeginRun {
     byte* step_bit_vector = NULL; // dir&step for each frame
     byte* limit_switch_bit_vector = NULL; // read via limit_switch(i)
 
-    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin)
+    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin, const int enable_pin)
       : motor_ct(motor_ct)
       , latch_pin(latch_pin)
       , shift_load_pin(shift_load_pin)
+      , enable_pin(enable_pin)
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
       , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) ) // i.e. need a whole byte for a fraction
@@ -226,14 +232,14 @@ class AccelStepperShift : public BeginRun {
       // not constructing `new` members till .begin()
     }
 
-    // FIXME: add an enable/disable call, setEnablePin() ? and enableOutputs()? disableOutputs() ?
-
     void begin() {
       // our 2 "latches"
       pinMode(latch_pin, OUTPUT);
       digitalWrite(latch_pin, LATCHIDLE);
       pinMode(shift_load_pin, OUTPUT);
       digitalWrite(shift_load_pin, SH_LD_IDLE);
+      pinMode(enable_pin, OUTPUT);
+      enable();
 
       // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift ") << motor_ct
@@ -300,32 +306,29 @@ class AccelStepperShift : public BeginRun {
     }
 
     void set_led_bar() {
-      // use led-bar to indicate that we are shifting, i.e. running
+      // use led-bar for various indications
 
-      static Every::Toggle shift_blink(100); // "blink" one of the leds
+      static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
+      
+      // shift register bits, we numbered the led from 9...0 in the comment
+      static constexpr int heartbeat_bit = 0;
+      static constexpr int recent_step_bit = 1;
 
-      byte dir_bit = 0;
-      byte step_bit = 0;
-      // last bit always on: "running"
-      dir_bit |= 1;
-      step_bit |= 1;
-      // second bit 2/3 on: "dir/step alternating"
-      dir_bit |= 1 << 1;
-      step_bit |= 0 << 1;
-      // third bit 1/3 on: "dir/step alternating"
-      dir_bit |= 0 << 2;
-      step_bit |= 1 << 2;
-      // 4th bit blinking
-      boolean do_blink = shift_blink(); // cache
-      if (do_blink) {
-        dir_bit |= shift_blink.state << 3;
-        step_bit |= shift_blink.state << 3;
+      byte led_bits = 0;
+
+      if ( spi_heartbeat() ) {
+        led_bits |= spi_heartbeat.state << heartbeat_bit;
       }
-      // last frame:
-      set_frame( dir_bit_vector, total_frames - 1, frame_mask, dir_bit );
-      set_frame( step_bit_vector, total_frames - 1, frame_mask, step_bit );
 
-      if (do_blink && DEBUGLOGBITVECTOR == 2) {
+      if ( recent_step.running ) {
+        led_bits |= 1 << recent_step_bit;
+      }
+      
+      // last frame: repeat because we send both bit-vectors
+      dir_bit_vector[total_frames - 1 ] = led_bits;
+      step_bit_vector[total_frames - 1 ] = led_bits;
+
+      if (spi_heartbeat() && DEBUGLOGBITVECTOR == 2) {
         Serial << F("OUT: ") << endl;
         dump_bit_vectors();
         //while (1) {};
@@ -401,6 +404,14 @@ class AccelStepperShift : public BeginRun {
       //if (!all_done) Serial << F("Done ? ") << all_done << endl;
 
       return ! done;
+    }
+
+    void enable() {
+      digitalWrite(enable_pin, ENABLE);
+    }
+    
+    void disable() {
+      digitalWrite(enable_pin, DISABLE);
     }
 
     void collect_bit(int i) { // motor_i
