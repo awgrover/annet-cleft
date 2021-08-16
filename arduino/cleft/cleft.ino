@@ -44,7 +44,6 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 #include "every.h"
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
-#include "LimitSwitch.h"
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
 #include "Commands.h"
@@ -95,10 +94,8 @@ const int Animation::animation_ct = array_size(animations);
 BeginRun* systems[] = {
   // all null: 9micros @ 8MHz 32u4
   stepper_shift,  // idle: 350micros @ 8MHz 32u4 1164 bytes used
-  // plus about 60 for testing limit_switches
   // runall: 300micros @48Mhz samd21 1620 used
   // idle: 78micros @48Mhz
-  //limit_switches, // 42micros @ 8MHz 32u4 244 bytes used
   //// NB Animation::current_animation, NEVER goes in here. sad
   new Commands(stepper_shift),
 };
@@ -127,7 +124,6 @@ void setup() {
   SPI.begin();
 
   // Each main object
-  // We `new` them so we can more easily see memory usage in console
   last_free = freeMemory();
   for (BeginRun* a_system : systems) {
     if (! a_system) continue; // skip NULLs
@@ -141,8 +137,6 @@ void setup() {
   // other startup behavior
 
   if (stepper_shift) stepper_shift->goto_limit();
-
-  Serial << F("FIXME // FIXME: not stepping at correct speed?") << endl;
 
   if (DEBUGMOVETEST) {
     //  move test
