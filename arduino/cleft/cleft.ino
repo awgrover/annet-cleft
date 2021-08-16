@@ -56,13 +56,13 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 
 constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
+constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 
 // SYSTEMS
 // We run them via systems[] (below)
 // We need to explicitly refer to a few, so need explicit name
 // When testing/developing, you can set these to NULL to skip using them
-AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN);
-LimitSwitch* limit_switches = new LimitSwitch(MOTOR_CT);
+AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
 AnimationWave1* animation = new AnimationWave1( // moving sine wave
   stepper_shift,
@@ -134,9 +134,6 @@ void setup() {
            << F(" used ") << (last_free - freeMemory()) << endl;
     last_free = freeMemory();
   }
-
-  // tie some things together
-  if (stepper_shift && limit_switches) stepper_shift->limit_switch = limit_switches->status;
 
   // other startup behavior
 

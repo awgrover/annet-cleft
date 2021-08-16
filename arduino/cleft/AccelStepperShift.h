@@ -93,7 +93,7 @@ class AccelStepperShift : public BeginRun {
     //          3.3V      16 VCC 3V               dir+,pul+,en+   16 Vcc
     //          GND       8 GND                                   8 GND
     //          MOSI      14 SER (shiftin)
-    //          MISO                                              9 Qh (shiftout) (7 is ~Qh)                                              
+    //          MISO                                              9 Qh (shiftout) (7 is ~Qh)
     //          SCK       11 SRCLK                                2 clk (15 & 2 can be swapped)
     //          latch_pin 12 RCLK                                 1 SH/~LD (latch - read while low, high for shift)
     //                    13 ~OE pull low
@@ -155,6 +155,9 @@ class AccelStepperShift : public BeginRun {
     static byte constexpr NOT_STEPBIT = 0 << 1;
     static boolean constexpr LATCHSTART = 1; // 1 if the latch pulse is LOW->HIGH->LOW
     static boolean constexpr LATCHIDLE = ! LATCHSTART;
+    static boolean constexpr SH_LD_IDLE = 1; // allow shift while high, load on low
+    static boolean constexpr SH_LD_LOAD = !SH_LD_IDLE; // allow shift while high, load on low
+
     // depends on how far the CRASH_LIMIT steps actually is
     static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
@@ -189,6 +192,7 @@ class AccelStepperShift : public BeginRun {
 
     const int motor_ct;
     const int latch_pin;
+    const int shift_load_pin; // for parallel-to-serial
     // derived
     const int total_used_bits;
     const int byte_ct;
@@ -202,15 +206,16 @@ class AccelStepperShift : public BeginRun {
     // an [] of bytes for the shift-register bits, for per-motor-frame
     byte* dir_bit_vector = NULL; // dir & step=0 for each frame
     byte* step_bit_vector = NULL; // dir&step for each frame
+    byte* limit_switch_bit_vector = NULL;
     // state of each limit switch, set after construct, optional
     // somebody would need to supply this vector [motor_ct]
     // and set an entry to true if a limit switch was on
     // e.g. use the status[] from LimitSwitch class
-    boolean *limit_switch = NULL; // NULL means don't use
 
-    AccelStepperShift(const int motor_ct, const int latch_pin)
+    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin)
       : motor_ct(motor_ct)
       , latch_pin(latch_pin)
+      , shift_load_pin(shift_load_pin)
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
       , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) )
@@ -224,6 +229,8 @@ class AccelStepperShift : public BeginRun {
     void begin() {
       pinMode(latch_pin, OUTPUT);
       digitalWrite(latch_pin, LATCHIDLE);
+      pinMode(shift_load_pin, OUTPUT);
+      digitalWrite(latch_pin, SH_LD_IDLE);
 
       // construct now, so we can control when memory is allocated
       Serial << F("BEGIN AccelStepperShift ") << motor_ct
@@ -259,6 +266,8 @@ class AccelStepperShift : public BeginRun {
       memset(step_bit_vector, 0, sizeof(byte)*motor_ct);
       dir_bit_vector = new byte[byte_ct];
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
+      limit_switch_bit_vector = new byte[byte_ct];
+      memset(limit_switch_bit_vector, 0, sizeof(byte)*motor_ct);
 
       for (int i = 0; i < motor_ct; i++) {
         // to 200 steps/sec in 0.1 sec
@@ -327,7 +336,7 @@ class AccelStepperShift : public BeginRun {
       // limit switches are optional,
       // moving up & hit it?
       // this add about 50micros to the loop
-      const boolean hit_limit = limit_switch != NULL && motors[motor_i]->direction() && limit_switch[motor_i];
+      const boolean hit_limit = motors[motor_i]->direction() && limit_switch(motor_i);
       if (hit_limit) {
         if ( ! motors[motor_i]->at_limit) { // and not already at limit
 
@@ -489,20 +498,26 @@ class AccelStepperShift : public BeginRun {
       // (NB: dir_bit_vector & step_bit_vector get overwritten)
       // each is about 60micros at 4MHz spi
       // at least 2.2micros pulse durations, and each takes 60, so ok
-      // SPI.transfer(byte []) overwrites the byte[] buffer,
-      // and we need to preserve it
-      // SO make a copy of bit_vectors
 
       byte dir_copy[byte_ct];
-      byte step_copy[byte_ct];
       unsigned long start = millis();
       if (DEBUGLOGBITVECTOR == 3) Serial << F("shift out ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
 
+      // SPI.transfer(byte []) overwrites the byte[] buffer,
+      // and we need to preserve it
+      // SO make a copy of bit_vectors
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
-      memcpy( step_copy, step_bit_vector, byte_ct * sizeof(byte));
+      // out is the step_bit_vector, but we capture the input
+      memcpy( limit_switch_bit_vector, step_bit_vector, byte_ct * sizeof(byte));
+
+      // read input pins, allow shift-in (5ns? 1000ns? for low to read)
+      digitalWrite(shift_load_pin, LOW); delayMicroseconds(1); digitalWrite(shift_load_pin, HIGH); delayMicroseconds(1);
 
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
+      // MSBFIRST affects read and write
       SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+
+      // Each transfer reads the input shift-register too, but we capture on the 2nd one
 
       if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
       SPI.transfer(dir_copy, byte_ct);
@@ -510,8 +525,10 @@ class AccelStepperShift : public BeginRun {
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
-      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(step_copy);
-      SPI.transfer(step_copy, byte_ct);
+      // Out is a copy of step_bit_vector
+      // Here's where we capture the limit-switches
+      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(limit_switch_bit_vector);
+      SPI.transfer(limit_switch_bit_vector, byte_ct);
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
@@ -540,7 +557,7 @@ class AccelStepperShift : public BeginRun {
       // But, we need 0=[n] byte, low-nybble
       const int r_byte_i = (byte_ct - 1) - byte_i;
       const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
-      const int offset = (frame_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=4, frame2=0, etc
+      const int offset = (frame_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=2, frame2=3, etc
       if (DEBUGFRAME > 0) {
         Serial << F("    set frame ") << frame_i << F(" = 0b") << _BIN(value) << F(" mask ") << _BIN(mask)
                << F(" byte[") << r_byte_i << F("]")
@@ -552,14 +569,24 @@ class AccelStepperShift : public BeginRun {
       return r_byte_i;
     }
 
+    boolean limit_switch(int motor_i) {
+      // get value of a limit switch
+      // which was read by the spi-transfer
+      // spi.transfer is MSBFIRST, and reads into byte[0] first
+      // so byte[0].bit[0] is actual shift-register[0].bit[7]
+      // and we are using the "first" bit of the shift-register as the first switch
+      const int byte_i = (motor_i * bits_per_frame ) / (sizeof(byte) * 8);
+      const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
+      const int offset = (motor_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=2, frame2=3, etc
+      const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 ..
+
+      return limit_switch_bit_vector[ byte_i ] & (1 << r_offset);
+    }
+
     void goto_limit() {
       // move all motors to the limit switch
       // skip this if no limit switches
 
-      if (! limit_switch) {
-        Serial << F("No limit switches, can't goto") << endl;
-        return;
-      }
       Serial << F("Goto LIMITUP") << endl;
 
       int distance;
