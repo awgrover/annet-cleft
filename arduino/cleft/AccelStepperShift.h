@@ -309,17 +309,19 @@ class AccelStepperShift : public BeginRun {
     void set_led_bar() {
       // use led-bar for various indications
 
-      static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
+      static Every::Toggle spi_heartbeat(300); // "blink" one of the leds NB: class level!
 
       // shift register bits, we numbered the led from 9...0 in the comment
       static constexpr int heartbeat_bit = 7;
       static constexpr int recent_step_bit = 1;
       static constexpr int recent_limit_bit = 2;
+      bool did_heartbeat = false;
 
       byte led_bits = 0;
 
       if ( spi_heartbeat() ) {
         led_bits |= spi_heartbeat.state << heartbeat_bit;
+        did_heartbeat = true;
       }
 
       if ( recent_step.running ) {
@@ -331,13 +333,16 @@ class AccelStepperShift : public BeginRun {
       }
 
       // last frame: repeat because we send both bit-vectors
-      dir_bit_vector[total_frames - 1 ] = led_bits;
-      step_bit_vector[total_frames - 1 ] = led_bits;
+      dir_bit_vector[ 0 ] = led_bits;
+      step_bit_vector[ 0 ] = led_bits;
 
-      if (spi_heartbeat() && DEBUGLOGBITVECTOR == 2) {
-        Serial << F("OUT: ") << endl;
-        dump_bit_vectors();
-        //while (1) {};
+      if ( did_heartbeat ) {
+        // if (DEBUGLOGBITVECTOR == 2) {
+        {
+          Serial << F("OUT: ") << spi_heartbeat.state << F(" ") << _BIN(led_bits) << endl;
+          dump_bit_vectors();
+          //while (1) {};
+        }
       }
     }
 
@@ -627,9 +632,9 @@ class AccelStepperShift : public BeginRun {
         motors[i]->move( distance );
       }
       too_long.reset(5000);
-      while (run() && ! too_long()) { 
-        heartbeat( NEO_STATE_UPLIMIT ); 
-        }
+      while (run() && ! too_long()) {
+        heartbeat( NEO_STATE_UPLIMIT );
+      }
       if (too_long.after()) {
         Serial << F("FAULT: too long to run ") << distance << endl;
         fault();
@@ -683,7 +688,7 @@ class AccelStepperShift : public BeginRun {
       disable();
       builtin_neo.setPixelColor(0, NEO_STATE_FAULT );
       builtin_neo.show();
-      while(1); // and lock up
+      while (1); // and lock up
     }
 };
 

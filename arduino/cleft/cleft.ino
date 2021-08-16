@@ -35,7 +35,7 @@
         9     Vcc "power"                         Should be on == power
         8     common-enable                       off on power-up, on at setup() and stays on
         7     spi-heartbeat (shiftreg[H]-7)       blink every 200ms, indicates spi.transfer loop being called
-        6     SCK                                 looks always on after spi.begin (actually blinks off, but imperceptible)
+        6     SCK                                 looks always on during spi (actually blinks off, but imperceptible)
         5     latch-out                           very fast flash on each spi-transfer
         4     latch-in                            looks always on after spi.begin (actually blinks off, but imperceptible)
         3     recent step (shiftreg[B]-1)         on for 200ms if any motor step'd
@@ -75,7 +75,6 @@ const uint32_t NEO_OFF = Adafruit_NeoPixel::Color(0, 0, 0); // off
 const uint32_t NEO_STATE_LOOPING = Adafruit_NeoPixel::Color(0, 255, 0); // Green (blink)
 const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Orange (blink)
 
-
 // NB: a #include list is auto-generated of extant .h files
 //  and it is alphabetical, so this order is not relevant
 //  and, in fact, is redundant for arduino-ide
@@ -98,8 +97,6 @@ constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
-
-
 
 // SYSTEMS
 // We run them via systems[] (below)
