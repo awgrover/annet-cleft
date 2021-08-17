@@ -93,7 +93,7 @@ const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Ora
 #define DEBUGMOVETEST 0
 #endif
 
-constexpr int MOTOR_CT = 1; // 15;
+constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
