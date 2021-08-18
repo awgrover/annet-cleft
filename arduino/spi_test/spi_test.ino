@@ -1,27 +1,62 @@
 /*
-  1. outputs a pile of bits, which can control the stepper-driver, but only on byte 0
-    the other bytes alternate off/on
-  2. reads "miso", assuming its a shiftin-register, but only byte 0
-    copies the first 2 bits to output byte[n]'s first 2 bytes
+  Has several test modes in loop().
+  For reading, writing, and read+writing shift-registers.
+  Assumes:
+  A chain of out shift-registers (serial-to-parallel) on spi MOSI,
+  A chain of corresponding in shift-registers (parallel-to-serial) on the same spi MISO.
+
+  Testing:
+    adjust the MOTOR_CT to get the REGISTER_CT you want
+
+    Probably do in this order:
+    set SLOW=1 & SLOWLATCH=1
+      more output, blinks led-bar, and long delay between shift in/out
+    shift-read (note off-by-one bit)
+      pull various in-bits to high/low
+      most likely to succeed: shows in-wiring is ok
+    spi-read
+      same, shows spi works at much higher speed
+    shift-write
+      put leds on various out-bits
+      most likely to succeed: shows out-wiring is ok
+    spi-write
+      same, shows spi works at much higher speed
+    spi-read-write
+      test with leds & pulling inputs low.
+      then add stepper
+    set SLOWLATCH=0
+    spi-read-write
+      shows higher speed is ok for in-latch
+    set SLOW=0 & hookup a stepper to various out-shift-registers
+    spi-read-write
+      shows it running steppers at more realistic speed
+
 */
 #include <SPI.h>
 #include <array_size.h>
 #include <Streaming.h>
 
-// set to true to go slow (500ms between transfer), and printout values
+// set to true to go slow (500ms between transfer), and printout values: easily seen blink
 #define SLOW 1
+// set to true for large delay between latch/etc
+#define SLOWLATCH 1
 
+constexpr int MOTOR_CT = 2 * 8 / 2; // nb: see REGISTER_CT, i.e. to get bytes divide by bits-per
+constexpr int BITS_PER_MOTOR = 2;
+constexpr int REGISTER_CT = (int) ceil((float)MOTOR_CT * BITS_PER_MOTOR / 8);
 constexpr int latch_pin = 12;
 constexpr int in_latch_pin = 11; // for the shift-in, is opposite sense
 constexpr int LATCHSTART = HIGH;
 constexpr int LATCHIDLE = ! LATCHSTART;
 constexpr int SLAVESELECT = 10; // samd21's don't need this
 // i'm using an LED bar on the 2nd out-shift-register, which is bit_vector[-2]
-constexpr int COPY_0IN_TO_OUT_BYTE = 2; // copy the 0th in byte, to the xTh outbyte (nb msb/lsb reversed)
-constexpr int BITS_PER_MOTOR = 2;
-byte bit_vector[(int) ceil(15.0 * BITS_PER_MOTOR / 8)];
+constexpr int COPY_0IN_TO_OUT_BYTE = 1; // copy the 0th in byte, to the xTh outbyte (nb msb/lsb reversed)
+static_assert(COPY_0IN_TO_OUT_BYTE < REGISTER_CT, "Can't copy to a byte that doesn't exist"); // xTh byte is in the bit_vector, so...
+byte bit_vector[ REGISTER_CT ];
 byte input_bit_vector[ array_size(bit_vector) ];
 constexpr int MAX_BYTE_I = array_size(bit_vector) - 1;
+
+void dump_bit_vector(byte *bytes, int byte_ct = 0);// arduino does not like default args in definition
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -45,12 +80,16 @@ void setup() {
 
 void loop() {
   // pick one
-  read_write();
+
   //shift_read();
   //spi_read();
+  spi_read_write();
 }
 
 void shift_read() {
+  // NB: this is 1 bit off! in-pin0 is bit 1, we lose in-pin7
+  // do REGISTER_CT + 1 bytes worth of shift-in,
+  // which should show if you have the serial-in-daisy-chain pulled-low.
   static boolean first_time = true;
   if (first_time) {
     // aka setup()
@@ -68,13 +107,21 @@ void shift_read() {
   }
 
   // read input pins, allow shift-in (5ns? 1000ns? for low to read)
-  digitalWrite(in_latch_pin, LOW); delay(1); digitalWrite(in_latch_pin, HIGH); delay(1);
+  digitalWrite(in_latch_pin, LOW);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(in_latch_pin, HIGH);
+  if (SLOWLATCH) delay(1);
 
   digitalWrite(SCK, LOW);
-  input_bit_vector[0] = shiftIn(MISO, SCK, MSBFIRST);
-  input_bit_vector[1] = shiftIn(MISO, SCK, MSBFIRST);
+  for (int i = 0; i < array_size(bit_vector); i++) {
+    input_bit_vector[i] = shiftIn(MISO, SCK, MSBFIRST);
+  }
+  byte extra[1];
+  extra[0] = shiftIn(MISO, SCK, MSBFIRST);
 
   dump_bit_vector(input_bit_vector);
+  Serial << F("  xtra ");
+  dump_bit_vector(extra, 1);
 
   digitalWrite(LED_BUILTIN, LOW);
   delay(SLOW ? 500 : 10);
@@ -82,6 +129,9 @@ void shift_read() {
 }
 
 void spi_read() {
+  // do REGISTER_CT + 1 bytes worth of shift-in,
+  // which should show if you have the serial-in-daisy-chain pulled-low.
+
   static boolean first_time = true;
   if (first_time) {
     SPI.begin();
@@ -97,22 +147,36 @@ void spi_read() {
   // note no (shift-in) latch_pin, because we are only concerned with reading
 
   // read input pins, allow shift-in (5ns? 1000ns? for low to read)
-  digitalWrite(in_latch_pin, LOW); delay(1); digitalWrite(in_latch_pin, HIGH); delay(1);
+  digitalWrite(in_latch_pin, LOW);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(in_latch_pin, HIGH);
+  if (SLOWLATCH) delay(1);
 
+
+  byte extra[1] = {0}; // for the SER (daisy-chain in)
   SPI.beginTransaction(SPISettings(SLOW ? 1000 : 1000000, MSBFIRST, SPI_MODE0));
   // shifts the bit-vector out (don't care), and shifts-in into same bit-vector
   SPI.transfer(input_bit_vector, array_size(input_bit_vector));
+  SPI.transfer(extra, array_size(extra));
   SPI.endTransaction();
 
   //Serial << F("[0]  ") << _BIN(input_bit_vector[ 0]) << endl;
   //Serial << F(" [") << MAX_BYTE_I << F("] ") << _BIN(input_bit_vector[ MAX_BYTE_I ]) << endl;
   dump_bit_vector(input_bit_vector);
+  Serial << F("  xtra ");
+  dump_bit_vector(extra, 1);
 
   digitalWrite(LED_BUILTIN, LOW);
   delay(SLOW ? 500 : 10);
 }
 
-void read_write() {
+void spi_read_write() {
+  // sets up a stepper-motor sequence to step 1 step forward per loop.
+  // reads all in-shift-registers, (and writes the 1st stage of stepping): dir before step
+  // copies the in-byte[0] to output byte[COPY_0IN_TO_OUT_BYTE], i.e. led-bar
+  // writes out (the 2nd stage of stepping): actual move & led-bar
+  // (does the 3rd stage of stepping): pulse off
+
   static boolean first_time = true;
   if (first_time) {
     SPI.begin();
@@ -129,7 +193,10 @@ void read_write() {
   digitalWrite(LED_BUILTIN, HIGH);
 
   // cause shiftin to read inputs, allow shift-out
-  digitalWrite(in_latch_pin, LOW); delay(1); digitalWrite(in_latch_pin, HIGH); delay(1);
+  digitalWrite(in_latch_pin, LOW);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(in_latch_pin, HIGH);
+  if (SLOWLATCH) delay(1);
 
   boolean first_transfer = true; // of the three steps for motorcontrol
   for (byte p : pattern) {
@@ -187,13 +254,15 @@ void read_write() {
     bit_vector[i] = alt ? 0xFF : 0x00;
   }
   alt = ! alt;
-  delay(10); // way more than shift-in to read
+  if (!SLOW) delay(10); // time for usb interrupt and stepper speed
 }
 
-void dump_bit_vector(byte *bytes) {
+void dump_bit_vector(byte *bytes, int byte_ct) {
   // NB; [8] is shifted out last, so is shift-register nearest ard
   // We reorder here so it reads right-to-left
-  for (int bi = 0; bi < array_size(bit_vector); bi++) {
+  if (byte_ct == 0) byte_ct = array_size(bit_vector); // optional count
+
+  for (int bi = 0; bi < byte_ct; bi++) {
     for (int bit_i = 0; bit_i < 8; bit_i++) {
       if ( ! (bit_i % BITS_PER_MOTOR) && bit_i != 0) Serial << ".";
       Serial << ( ( bytes[bi] & (1 << (7 - bit_i)) ) ? '1' : '0' );
