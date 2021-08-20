@@ -36,6 +36,8 @@
 #include <array_size.h>
 #include <Streaming.h>
 
+#include "every.h"
+
 // set to true to go slow (500ms between transfer), and printout values: easily seen blink
 #define SLOW 1
 // set to true for large delay between latch/etc
@@ -48,7 +50,16 @@ constexpr int latch_pin = 12;
 constexpr int in_latch_pin = 11; // for the shift-in, is opposite sense
 constexpr int LATCHSTART = HIGH;
 constexpr int LATCHIDLE = ! LATCHSTART;
-constexpr int SLAVESELECT = 10; // samd21's don't need this
+constexpr int SLAVESELECT = 4; // samd21's don't need this
+
+constexpr int used_bits = 2;
+constexpr byte used_mask = (1 << used_bits) - 1;
+constexpr byte frame_mask = (1 << BITS_PER_MOTOR) - 1;
+
+constexpr int ENABLE_PIN = 10;
+constexpr int JUMPER_PIN = A5; // to A4
+constexpr int JUMPER_PIN_X = A4; // for A5
+
 // i'm using an LED bar on the 2nd out-shift-register, which is bit_vector[-2]
 constexpr int COPY_0IN_TO_OUT_BYTE = 1; // copy the 0th in byte, to the xTh outbyte (nb msb/lsb reversed)
 static_assert(COPY_0IN_TO_OUT_BYTE < REGISTER_CT, "Can't copy to a byte that doesn't exist"); // xTh byte is in the bit_vector, so...
@@ -57,6 +68,7 @@ byte input_bit_vector[ array_size(bit_vector) ];
 constexpr int MAX_BYTE_I = array_size(bit_vector) - 1;
 
 void dump_bit_vector(byte *bytes, int byte_ct = 0);// arduino does not like default args in definition
+void dump_byte(byte b);
 
 void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
@@ -65,8 +77,12 @@ void setup() {
   pinMode(in_latch_pin, OUTPUT);
   digitalWrite(in_latch_pin, HIGH);
 
+  pinMode(ENABLE_PIN, OUTPUT);
+  digitalWrite(ENABLE_PIN, HIGH);
+
   pinMode(SLAVESELECT, OUTPUT);
   digitalWrite(SLAVESELECT, LOW); //release chip
+
   Serial.begin(115200); while (!Serial);
   Serial << endl << F("Begin motors ") << (8 * array_size(bit_vector) / BITS_PER_MOTOR)
          << F(", bytes ") << array_size(bit_vector)
@@ -83,7 +99,8 @@ void loop() {
 
   //shift_read();
   //spi_read();
-  spi_read_write();
+  //spi_read_write();
+  wiring_test();
 }
 
 void shift_read() {
@@ -257,17 +274,107 @@ void spi_read_write() {
   if (!SLOW) delay(10); // time for usb interrupt and stepper speed
 }
 
+void wiring_test() {
+  // Using SPI, and a jumper between A4/A5:
+  // Show read of the shift-in (marking expected bits).
+  // If jumper is open, rapid blink dir/step, and enable.
+  // If jumper is closed, write 1's to dir/step. and to enable.
+
+
+  static boolean first_time = true;
+  if (first_time) {
+    SPI.begin();
+    pinMode(JUMPER_PIN_X, OUTPUT);
+    digitalWrite(JUMPER_PIN_X, LOW);
+    pinMode(JUMPER_PIN, INPUT_PULLUP);
+    first_time = false;
+  }
+
+  static Every say(500);
+  boolean say_now = say();
+
+  static Every::Toggle rapid_blink(100); // best if odd multiple of say's time
+  boolean rapid_blink_now = rapid_blink();
+  byte out_bits;
+  boolean jumper = digitalRead(JUMPER_PIN); // open=high
+
+  if (jumper) {
+    // open-jumper = all off
+    
+    // off used-bits, on unused-bits
+    out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+    if (rapid_blink_now) {
+      digitalWrite(ENABLE_PIN, rapid_blink.state);
+      if (rapid_blink.state) out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+      else out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
+      digitalWrite(LED_BUILTIN, rapid_blink.state);
+    }
+  }
+  else {
+    // closed-jumper = all on
+    digitalWrite(ENABLE_PIN, HIGH);
+    // off used-bits, on unused-bits
+    out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+  if (say_now) {
+    Serial << endl;
+    Serial << F("Jumper ") << (jumper ? F("OFF") : F("ON")) << F(" frame "); dump_byte(out_bits); Serial << endl;
+  }
+
+  // cause shiftin to read inputs, allow shift-out
+  digitalWrite(in_latch_pin, LOW);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(in_latch_pin, HIGH);
+  if (SLOWLATCH) delay(1);
+
+  // build a full byte
+  byte out_byte = 0;
+  for (int i = 0; i < 8 / BITS_PER_MOTOR; i++) {
+    out_byte |= out_bits << i * BITS_PER_MOTOR;
+  }
+  // build bit_vector
+  for (int i = 0; i < array_size(bit_vector); i++) {
+    bit_vector[i] = out_byte;
+  }
+  if (say_now) {
+    Serial << F("one byte "); dump_byte(out_byte); Serial << endl;
+    Serial << F("out bits "); dump_bit_vector(bit_vector, array_size(bit_vector));
+  }
+
+  SPI.beginTransaction(SPISettings(SLOW ? 1000 : 1000000, MSBFIRST, SPI_MODE0));
+  // sends 0...[n-1] [n], no matter what MSB/LSB first is!
+  // so, nearest shift-register is [n]
+  // Also, reads-in to the bit_vector
+  SPI.transfer(bit_vector, array_size(bit_vector));
+
+  // And, capture the input
+  // for the 74HC165, the inputs are read when latch is low (above)
+  memcpy( input_bit_vector, bit_vector, array_size(bit_vector));
+  if (say_now) {
+    Serial << F("IN       "); dump_bit_vector(input_bit_vector);
+  }
+
+  SPI.endTransaction();
+  digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+}
+
 void dump_bit_vector(byte *bytes, int byte_ct) {
   // NB; [8] is shifted out last, so is shift-register nearest ard
   // We reorder here so it reads right-to-left
   if (byte_ct == 0) byte_ct = array_size(bit_vector); // optional count
 
   for (int bi = 0; bi < byte_ct; bi++) {
-    for (int bit_i = 0; bit_i < 8; bit_i++) {
-      if ( ! (bit_i % BITS_PER_MOTOR) && bit_i != 0) Serial << ".";
-      Serial << ( ( bytes[bi] & (1 << (7 - bit_i)) ) ? '1' : '0' );
-    }
+    dump_byte(bytes[bi]);
     Serial << "  ";
   }
   Serial << endl;
+}
+
+void dump_byte(byte b) {
+  for (int bit_i = 0; bit_i < 8; bit_i++) {
+    if ( ! (bit_i % BITS_PER_MOTOR) && bit_i != 0) Serial << ".";
+    Serial << ( ( b & (1 << (7 - bit_i)) ) ? '1' : '0' );
+  }
+
 }
