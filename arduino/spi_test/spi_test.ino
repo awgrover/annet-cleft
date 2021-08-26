@@ -43,8 +43,9 @@
 // set to true for large delay between latch/etc
 #define SLOWLATCH 1
 
-constexpr int MOTOR_CT = 2 * 8 / 2; // nb: see REGISTER_CT, i.e. to get bytes divide by bits-per
+constexpr int OUTCHIPS = 2;
 constexpr int BITS_PER_MOTOR = 2;
+constexpr int MOTOR_CT = OUTCHIPS * 8 / BITS_PER_MOTOR; // nb: see REGISTER_CT, i.e. to get bytes divide by bits-per
 constexpr int REGISTER_CT = (int) ceil((float)MOTOR_CT * BITS_PER_MOTOR / 8);
 constexpr int latch_pin = 12;
 constexpr int in_latch_pin = 11; // for the shift-in, is opposite sense
@@ -83,10 +84,13 @@ void setup() {
   pinMode(SLAVESELECT, OUTPUT);
   digitalWrite(SLAVESELECT, LOW); //release chip
 
-  Serial.begin(115200); while (!Serial);
+  Every fastblink(100);
+  Timer serialtimeout(1500);
+  Serial.begin(115200); while (!Serial & !serialtimeout()) digitalWrite(LED_BUILTIN, ! digitalRead(LED_BUILTIN));
   Serial << endl << F("Begin motors ") << (8 * array_size(bit_vector) / BITS_PER_MOTOR)
          << F(", bytes ") << array_size(bit_vector)
          << F(", bits per ") << BITS_PER_MOTOR
+         << F(" SLOW? ") << SLOW
          << endl;
 
   for (int i = 0; i < array_size(bit_vector); i++) {
@@ -98,9 +102,81 @@ void loop() {
   // pick one
 
   //shift_read();
+  shift_write();
   //spi_read();
   //spi_read_write();
-  wiring_test();
+  // wiring_test();
+}
+
+void shift_write() {
+  static boolean first_time = true;
+  if (first_time) {
+    // aka setup()
+    pinMode(MOSI, OUTPUT);
+    pinMode(SCK, OUTPUT);
+    pinMode(latch_pin, OUTPUT);
+    digitalWrite(latch_pin, LOW);
+    pinMode(JUMPER_PIN_X, OUTPUT);
+    digitalWrite(JUMPER_PIN_X, LOW);
+    pinMode(JUMPER_PIN, INPUT_PULLUP);
+    first_time = false;
+  }
+
+  static Every say(500);
+  boolean say_now = say();
+
+  static Every::Toggle rapid_blink(100); // best if odd multiple of say's time
+  boolean rapid_blink_now = rapid_blink();
+  byte out_bits;
+  boolean jumper = digitalRead(JUMPER_PIN); // open=high
+
+  if (jumper) {
+    // open-jumper = rapid blink
+
+    // off used-bits, on unused-bits
+    out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+    digitalWrite(ENABLE_PIN, rapid_blink.state);
+    if (rapid_blink.state) out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+    else out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
+    digitalWrite(LED_BUILTIN, rapid_blink.state);
+    if (rapid_blink_now) {
+      //Serial << F("rapid one byte ") << _BIN(out_bits); Serial << endl;
+    }
+  }
+  else {
+    // closed-jumper = all on
+    digitalWrite(ENABLE_PIN, HIGH);
+    // off used-bits, on unused-bits
+    out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+  if (say_now) {
+    Serial << endl;
+    Serial << F("Jumper ") << (jumper ? F("OFF") : F("ON")) << F(" frame "); dump_byte(out_bits);
+    Serial << F(" ") << millis() << endl;
+  }
+
+  // build a full byte
+  byte out_byte = 0;
+  for (int i = 0; i < 8 / BITS_PER_MOTOR; i++) {
+    out_byte |= out_bits << i * BITS_PER_MOTOR;
+  }
+  // build bit_vector
+  for (int i = 0; i < array_size(bit_vector); i++) {
+    bit_vector[i] = out_byte;
+  }
+  //if (rapid_blink_now) { Serial << F("out bits "); dump_bit_vector(bit_vector, array_size(bit_vector)); }
+
+  if (say_now) {
+    Serial << F("one byte "); dump_byte(out_byte); Serial << endl;
+    Serial << F("out bits "); dump_bit_vector(bit_vector, array_size(bit_vector));
+  }
+
+  for (int i = 0; i < array_size(bit_vector); i++) {
+    shiftOut(MOSI, SCK, MSBFIRST, bit_vector[i]);
+    //Serial << F("shifted ") << i << F(" "); dump_byte(out_byte); Serial << endl;
+  }
+  digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
 }
 
 void shift_read() {
@@ -115,6 +191,7 @@ void shift_read() {
     pinMode(in_latch_pin, OUTPUT);
     digitalWrite(in_latch_pin, HIGH);
     first_time = false;
+
   }
 
   digitalWrite(LED_BUILTIN, HIGH);
@@ -300,7 +377,7 @@ void wiring_test() {
 
   if (jumper) {
     // open-jumper = all off
-    
+
     // off used-bits, on unused-bits
     out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
     if (rapid_blink_now) {
