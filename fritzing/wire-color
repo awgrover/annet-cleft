@@ -1,0 +1,2 @@
+#!/bin/bash
+xsltproc  --nomkdir wire-colors.xsl "$1" | awk '{print $2}' | sort -u | color-name

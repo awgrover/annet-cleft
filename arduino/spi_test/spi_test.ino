@@ -56,6 +56,7 @@ constexpr int SLAVESELECT = 4; // samd21's don't need this
 constexpr int used_bits = 2;
 constexpr byte used_mask = (1 << used_bits) - 1;
 constexpr byte frame_mask = (1 << BITS_PER_MOTOR) - 1;
+constexpr byte limit_switch_mask = frame_mask & 1; // first bit
 
 constexpr int ENABLE_PIN = 10;
 constexpr int JUMPER_PIN = A5; // to A4
@@ -102,10 +103,10 @@ void loop() {
   // pick one
 
   //shift_read();
-  shift_write();
+  //shift_write();
   //spi_read();
   //spi_read_write();
-  // wiring_test();
+  wiring_test();
 }
 
 void shift_write() {
@@ -125,7 +126,7 @@ void shift_write() {
   static Every say(500);
   boolean say_now = say();
 
-  static Every::Toggle rapid_blink(100); // best if odd multiple of say's time
+  static Every::Toggle rapid_blink(500); // best if odd multiple of say's time
   boolean rapid_blink_now = rapid_blink();
   byte out_bits;
   boolean jumper = digitalRead(JUMPER_PIN); // open=high
@@ -356,7 +357,7 @@ void wiring_test() {
   // Show read of the shift-in (marking expected bits).
   // If jumper is open, rapid blink dir/step, and enable.
   // If jumper is closed, write 1's to dir/step. and to enable.
-
+  //    AND copy the limit switches to
 
   static boolean first_time = true;
   if (first_time) {
@@ -370,25 +371,26 @@ void wiring_test() {
   static Every say(500);
   boolean say_now = say();
 
-  static Every::Toggle rapid_blink(100); // best if odd multiple of say's time
+  static Every::Toggle rapid_blink(500); // best if odd multiple of say's time
   boolean rapid_blink_now = rapid_blink();
   byte out_bits;
-  boolean jumper = digitalRead(JUMPER_PIN); // open=high
+  boolean jumper = ! digitalRead(JUMPER_PIN); // open=high
 
-  if (jumper) {
+  if (! jumper) {
     // open-jumper = all off
 
     // off used-bits, on unused-bits
     out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+    digitalWrite(ENABLE_PIN, rapid_blink.state);
+    if (rapid_blink.state) out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
+    else out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
+    digitalWrite(LED_BUILTIN, rapid_blink.state);
     if (rapid_blink_now) {
-      digitalWrite(ENABLE_PIN, rapid_blink.state);
-      if (rapid_blink.state) out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
-      else out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
-      digitalWrite(LED_BUILTIN, rapid_blink.state);
+      // debug...
     }
   }
   else {
-    // closed-jumper = all on
+    // closed-jumper = all on, except 1st 4 == limit switch
     digitalWrite(ENABLE_PIN, HIGH);
     // off used-bits, on unused-bits
     out_bits = (~0 & used_mask)  | (0 & (frame_mask ^ used_mask));
@@ -396,7 +398,7 @@ void wiring_test() {
   }
   if (say_now) {
     Serial << endl;
-    Serial << F("Jumper ") << (jumper ? F("OFF") : F("ON")) << F(" frame "); dump_byte(out_bits); Serial << endl;
+    Serial << F("Jumper ") << (jumper ? F("ON") : F("OFF")) << F(" frame "); dump_byte(out_bits); Serial << endl;
   }
 
   // cause shiftin to read inputs, allow shift-out
@@ -408,7 +410,22 @@ void wiring_test() {
   // build a full byte
   byte out_byte = 0;
   for (int i = 0; i < 8 / BITS_PER_MOTOR; i++) {
-    out_byte |= out_bits << i * BITS_PER_MOTOR;
+    if (jumper) {
+      // copying the last-cycle's input
+      // limit-switch is pulled high for open.
+      byte limit_switch = input_bit_vector[0] & (limit_switch_mask << i * BITS_PER_MOTOR);
+      
+      out_byte |= (limit_switch ? out_bits : (out_bits & ~1)) << (i * BITS_PER_MOTOR);
+      /* Serial << F("L ") << F(" "); dump_byte(out_byte);
+      Serial << F(" mask ") << _BIN(limit_switch_mask << i * BITS_PER_MOTOR)
+      << F(" @ ") << i << F(" ") << _BIN(limit_switch)
+      << F(" -> out "); dump_byte(out_byte);
+      Serial << endl;
+      */
+    }
+    else {
+      out_byte |= out_bits << (i * BITS_PER_MOTOR);
+    }
   }
   // build bit_vector
   for (int i = 0; i < array_size(bit_vector); i++) {
