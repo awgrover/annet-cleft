@@ -1,6 +1,10 @@
 # annet-cleft
 
-code and design
+Cleft is a sculpture about 8' around. This project is meant to animate it, eventually responding to participants.
+
+It has 15 segments to move. So, 15 stepper motors.
+ 
+This project has code and electronics for the control-system.
 
 # Arduino code
 
