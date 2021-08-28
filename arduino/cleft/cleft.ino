@@ -67,7 +67,7 @@
   Several of the .h files are from my personal library of useful things:
     https://github.com/awgrover/misc_arduino_tools
   and especially a non-blocking periodic & timer:
-    https://github.com/awgrover/Timer-for-arduino
+    https://github.com/awgrover/misc_arduino_tools/blob/master/every/src/every.h
 */
 
 #include <Adafruit_NeoPixel.h> // Adafruit

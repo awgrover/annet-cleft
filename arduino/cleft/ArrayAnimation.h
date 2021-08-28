@@ -1,6 +1,6 @@
 #pragma once
 
-// NOT FINISHED
+// NOT FINISHED -- NOT USED YET
 
 #include "ExponentialSmooth.h"
 
