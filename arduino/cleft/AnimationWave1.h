@@ -1,5 +1,9 @@
-#pragma once /* full sin wave that moves from each tip
+#pragma once 
 
+/* 
+  A manager/protocol,
+  and several animiations.
+  I plan on an animation framework, so this is an interim solution.
 */
 
 #include "every.h"
@@ -7,8 +11,16 @@
 #include "AccelStepperShift.h"
 
 class Animation : public BeginRun {
+  // Protocol that Animations do.
+  // FIXME: move to own file, or will change w/real animation framework
+  // ALSO: manager for current_anmiation (class static)
+
   public:
+    // keep track of your own state!
+    // FIXME: document which are public states
     enum State { Restart, Starting, Running, Stopping, Idle, Off };
+
+    // Which animation we are running
     static Animation* current_animation;
     static Animation* animations[];
     static const int animation_ct;
@@ -61,7 +73,7 @@ class AnimationWave1  : public Animation {
 
       // FIXME: annet liked it being not perfectly balanced
       // I had set the right-half segments to some other max/accel (the default I think)
-      // so, re-add some? or do another animation w/systemic assymetrys
+      // so, re-add some? or do another animation w/systemic assymetries
       for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
