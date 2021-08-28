@@ -17,6 +17,7 @@
 
   Review the #define's, which change some debug & performance modes. I
   use this code in various modes (especially with the visualization) to test and develop.
+  NB: AccelStepperShift.h has a relevant #define.
 
   In Arduino-IDE, set the Preferences:Compiler Warnings to at lease "more". Instance variable
   initiatlization order is important. We should be warning free.
@@ -62,6 +63,11 @@
         clockwise from top
         sensor
         animation state
+
+  Several of the .h files are from my personal library of useful things:
+    https://github.com/awgrover/misc_arduino_tools
+  and especially a non-blocking periodic & timer:
+    https://github.com/awgrover/Timer-for-arduino
 */
 
 #include <Adafruit_NeoPixel.h> // Adafruit
@@ -280,7 +286,8 @@ void loop() {
 }
 
 void heartbeat(const uint32_t color) {
-  // the loop() heartbeat.
+  // heartbeat for a particular color (which is the state)
+  // NB: a global function, used by other classes!
   static Every::Toggle heartbeat(200);
   if ( heartbeat() ) {
     builtin_neo.setPixelColor(0, heartbeat.state ? NEO_OFF : color );
