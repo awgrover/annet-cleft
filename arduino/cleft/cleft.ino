@@ -15,6 +15,12 @@
   We send commands starting with "<".
   We respond to a few commands.
 
+  Review the #define's, which change some debug & performance modes. I
+  use this code in various modes (especially with the visualization) to test and develop.
+
+  In Arduino-IDE, set the Preferences:Compiler Warnings to at lease "more". Instance variable
+  initiatlization order is important. We should be warning free.
+
   As of July 2021, the design is:
     one arduino Zero equivalent (48MHz): adafruit Metro M0 Express
     15 motors, with TB6600 controllers, and limit switches
@@ -23,13 +29,14 @@
     3 IR cameras (I2C)
     Several LED indicators
     AccelStepper to run the motors (but capturing as bit-vector for SPI)
+    Lots of wiring & connectors
+    Not done yet:
     An animation framework based on key-frames and transition-functions.
     An interaction module that interprets the cameras and decides on animation sequences.
-    Lots of wiring & connectors
 
 
     Wiring
-      shift registers (in/out), enable, : see AccelStepperShift.h
+      shift registers (in/out), latch-out, latch-in, stepper-enable, : see AccelStepperShift.h
       LED-Bar, end of (out) shift-register chain
         bit   assignment                          Desc
         9     Vcc "power"                         Should be on == power
@@ -75,7 +82,7 @@ const uint32_t NEO_OFF = Adafruit_NeoPixel::Color(0, 0, 0); // off
 const uint32_t NEO_STATE_LOOPING = Adafruit_NeoPixel::Color(0, 255, 0); // Green (blink)
 const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Orange (blink)
 
-// NB: a #include list is auto-generated of extant .h files
+// NB: a #include list is magically done by arduino-ide of extant .h files
 //  and it is alphabetical, so this order is not relevant
 //  and, in fact, is redundant for arduino-ide
 #include "freememory.h"
@@ -101,11 +108,12 @@ constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
 constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
 
 // SYSTEMS
+// Things that setup, and run during loop. See begin_run.h.
 // We run them via systems[] (below)
-// We need to explicitly refer to a few, so need explicit name
+// We need to explicitly refer to a few, so need explicit names.
 // When testing/developing, you can set these to NULL to skip using them
 AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN, FAKE_LIMIT_PIN, FAKE_LIMIT_PIN_X);
-//ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT);
+//ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT); // later
 AnimationWave1* animation = new AnimationWave1( // moving sine wave
   stepper_shift,
   0.15, // amplitude meters
@@ -116,7 +124,7 @@ AnimationWave1* animation = new AnimationWave1( // moving sine wave
 
 Animation* Animation::current_animation = animation;
 
-// this list is only for serial commands (see Commands)
+// this list is only for serial commands (see Commands), to pick an animation.
 Animation* Animation::animations[] = {
   animation,
   new AnimationWave2( // the cute wave "@"
@@ -150,6 +158,21 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, HIGH);
 
+  serial_begin(115200); // cf. integrated usb vs not-integrated
+
+  // Integrated USB chips have trouble uploading sometimes
+  // (especially if you corrupt memory, or go into a tight loop)
+  // So, give some time at startup to notice re-upload
+  if (Serial) delay(2000); // allow uploading when cpu gets screwed
+
+  digitalWrite(LED_BUILTIN, LOW);
+
+  Serial << endl;
+  // This prefix should be first, for memory/millis
+  Serial << F("Start free ") << base_memory << endl;
+  Serial << F("After Serial.begin ") << freeMemory() << endl;
+  Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
+
   builtin_neo.begin();
   // weirdly, the first set doesn't show
   builtin_neo.setBrightness(5); // too bright!
@@ -158,18 +181,7 @@ void setup() {
   builtin_neo.setPixelColor(0, NEO_STATE_SETUP );
   builtin_neo.show();
 
-  // Integrated USB chips have trouble uploading sometimes
-  // (especially if you corrupt memory, or go into a tight loop)
-  // So, give some time at startup to notice re-upload
-  delay(2000); // allow uploading when cpu gets screwed
-  digitalWrite(LED_BUILTIN, LOW);
-
-  Serial.begin(115200); while (!Serial) {}
-  Serial << endl;
-  // This prefix should be first, for memory/millis
-  Serial << F("Start free ") << base_memory << endl;
-  Serial << F("After Serial.begin ") << freeMemory() << endl;
-  Serial << F("Clock ") << ((F_CPU / 1000.0) / 1000.0) << F(" MHz") << endl;
+  // FIXME: use neopixel for serial indication: if (Serial) ...
 
   // allow other spi users
   SPI.begin();
@@ -187,6 +199,8 @@ void setup() {
 
   // other startup behavior
 
+  // FIXME? shouldn't I have currentanimation.begin() here?
+
   if (stepper_shift) stepper_shift->goto_limit();
 
   if (DEBUGMOVETEST) {
@@ -195,6 +209,31 @@ void setup() {
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
+}
+
+void serial_begin(unsigned long baud) {
+  // Non-integrated USB (e.g. Uno) doesn't need a test of: `while (!Serial)`.
+  // Integrated USB does (e.g. samd21 etc), 
+  //  * but `Serial` only goes true if usb is actually hooked up
+  //  * and if the arduino gets hung (e.g. memory corruption), it may be very
+  //    difficult to get it to respond to a new upload.
+  //    SO: you should add a delay(2000) in your setup, early, so you can
+  //    guarantee time to upload.
+  Every fastblink(100);
+  Timer serialtimeout(1500); // should be plenty of time
+
+  Serial.begin(baud); 
+  // timeout if Serial never goes true (integrated USB & not connected).
+  while (! ( Serial || serialtimeout() )) {
+    if (fastblink()) digitalWrite(LED_BUILTIN, ! digitalRead(LED_BUILTIN));
+  }
+  if (Serial) {
+    Serial << F("Serial ") << baud << endl;
+    digitalWrite(LED_BUILTIN, HIGH);
+  }
+  else {
+    digitalWrite(LED_BUILTIN, LOW); // not that informative, heartbeat will quickly change this.
+    }
 }
 
 void loop() {
@@ -208,18 +247,21 @@ void loop() {
   
   // Run each object/module/system
   for (BeginRun* a_system : systems) {
-    if (! a_system) continue; // skip NULLs
-    a_system->run();
+    if ( a_system ) { // skip NULLs
+      a_system->run();
+    }
   }
-  // bah, I change animations, but I would have to update systems[n]
+  // bah, this is a BeginRun system, but I change animations, and so I would have to update systems[n]
+  // FIXME
   if (Animation::current_animation) Animation::current_animation->run();
 
   // let a system clean up from the state of one loop
   // i.e. systems might check each other for a per-loop state
   // e.g. AccelStepperNote sets do_step if it wants a step this loop
   for (BeginRun* a_system : systems) {
-    if (! a_system) continue; // skip NULLs
-    a_system->finish_loop();
+    if ( a_system ) { // skip NULLs
+      a_system->finish_loop();
+    }
   }
 
   // keep track of loop time, and output status every so often
@@ -238,6 +280,7 @@ void loop() {
 }
 
 void heartbeat(const uint32_t color) {
+  // the loop() heartbeat.
   static Every::Toggle heartbeat(200);
   if ( heartbeat() ) {
     builtin_neo.setPixelColor(0, heartbeat.state ? NEO_OFF : color );
@@ -246,6 +289,8 @@ void heartbeat(const uint32_t color) {
 }
   
 /*
+
+  Left this here to remind me about the animation framework that isn't done yet.
 
   void loop() {
 

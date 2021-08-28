@@ -1,6 +1,15 @@
 # annet-cleft
 
-_Cleft_ is a sculpture about 8' around. This project is meant to animate it, eventually responding to participants.
+_Cleft_ is a sculpture about 8' around. 
+http://www.annetcouwenberg.com/spirit
+
+
+This project is meant to animate it, eventually responding to participants. 
+1st animated installation (will be) at https://cadvc.umbc.edu/
+Cleft has been shown before, on a static base.
+
+Two classes at UMBC worked on the physical suspension:
+http://www.annetcouwenberg.com/spirit
 
 It has 15 segments to move. So, 15 stepper motors.
  
