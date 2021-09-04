@@ -70,11 +70,11 @@ class AnimationWave1  : public Animation {
       int speed = accel * time; // final speed
 
       for (int i = 0; i < all_motors->motor_ct; i++) {
-        // FIXME: annet liked it being not perfectly balanced
-        // I had set the right-half segments to some other max/accel (the default I think)
-        // so, re-add some? or do another animation w/systemic assymetries
-        // try - i * 0.01 * speed
-        all_motors->motors[i]->setMaxSpeed(speed);
+        // annet liked it being not perfectly balanced
+        // so, systematically reduce speed:
+        int this_speed = speed - i * 0.01 * speed;
+        Serial << F("## ") << i << F(" ") << this_speed << endl;
+        all_motors->motors[i]->setMaxSpeed(this_speed);
         all_motors->motors[i]->setAcceleration(accel);
       }
 
