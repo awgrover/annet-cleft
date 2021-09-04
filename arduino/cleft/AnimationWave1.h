@@ -163,7 +163,6 @@ class AnimationWave1  : public Animation {
         if ( all_motors->motors[i]->do_step ) {
           if ( abs(all_motors->motors[i]->currentPosition()) == (int) amplitude ) {
             // hit max/min, so reverse
-            // FIXME: assuming around 0, add a around-home to all_motors or something
             // fixme: this reverses when [0..7] hit max, but that means [8..14] are 1 behind!
             //  so, we'll get slightly out of step (by 1 on each reverse)
             //  could fix by testing [7..14] instead...
@@ -172,7 +171,6 @@ class AnimationWave1  : public Animation {
             Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
             // only need to count cycles at motor[0]
-            // FIXME: end of thing is when [0] hits cycle, then each time we hit max, aim for zero, till all end & zerod
             if (i == 0 ) {
               cycles ++;
               // "+1" because we go: 0 -> amp -> 0 -> -amp -> 0 -> amp. So initial +amp, then twice at +amp,-amp for a cycle
@@ -184,7 +182,6 @@ class AnimationWave1  : public Animation {
                   all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                   all_motors->motors[all_motors->motor_ct - ii - 1]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                 }
-                // FIXME: and the other 1/2
                 return;
               }
             }
@@ -235,8 +232,6 @@ class AnimationWave2  : public Animation {
     void restart() {
       Serial << F("AW start ") << ((long) this) << endl;
       cycles = 0;
-
-      // FIXME: each motor, set maxspeed and accel to achieve frequency for amplitude
 
       float cycle_length = 1.0 / frequency; // seconds per cycle
       int distance = (amplitude / 2.0); // how far we'll need to move
@@ -324,12 +319,10 @@ class AnimationWave2  : public Animation {
 
           if ( hit_min_max ) {
             // so reverse
-            // FIXME: assuming around 0, add a around-home to all_motors or something
             all_motors->motors[i]->moveTo( amplitude_for_segment(i, ! direction) );
             Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
             // only need to count cycles at motor[max]
-            // FIXME: end of thing is when [0] hits cycle, then each time we hit max, aim for zero, till all end & zerod
             if (i == 0) {
               cycles ++;
               // "+1" because we go: 0 -> amp -> 0 -> -amp -> 0 -> amp.
@@ -340,7 +333,6 @@ class AnimationWave2  : public Animation {
                 for (int ii = 0; ii < segments; ii++) {
                   all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                 }
-                // FIXME: and the other 1/2
                 return;
               }
             }
