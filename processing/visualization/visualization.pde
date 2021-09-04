@@ -235,6 +235,7 @@ void keyPressed() {
         if (key == shift_numbers[i]) {
           println("Send animation " + char(int('1') + i));
           if (arduino_port != null) arduino_port.write(char(int('1') + i));
+          return;
         }
       }
 

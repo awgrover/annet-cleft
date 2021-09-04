@@ -116,7 +116,7 @@ class AccelStepperNoted: public AccelStepper {
 
 class AccelStepperShift : public BeginRun {
     // for many DFRobot TB6600
-    //    input labeling seems confusing, all "+" to +, 
+    //    input labeling seems confusing, all "+" to +,
     //      pul- steps on transition to high.
     //      dir- : high is forward, low is backwards (clock/counter-clock).
     // via a chain of shift-registers (2 bits per tb6600, common enable)
@@ -258,7 +258,7 @@ class AccelStepperShift : public BeginRun {
       , enable_pin(enable_pin)
       , fake_limit_pin(fake_limit_pin)
       , fake_limit_pin_x(fake_limit_pin_x)
-      // pre-calculating a bunch of stuff
+        // pre-calculating a bunch of stuff
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
       , byte_ct( ceil( total_used_bits / (sizeof(byte) * 8.0) ) ) // i.e. need a whole byte for a fraction
@@ -307,6 +307,13 @@ class AccelStepperShift : public BeginRun {
         Serial << F("Free ") << freeMemory() << endl;
         //while (1) delay(20);
       }
+      Serial << F("DEBUGBITVECTOR ") << DEBUGBITVECTOR
+             << F(" DEBUGLOGBITVECTOR ")  << DEBUGLOGBITVECTOR
+             << F(" DEBUGPOSPERSTEP ")  << DEBUGPOSPERSTEP
+             << F(" DEBUGSTOPAFTER ")  << DEBUGSTOPAFTER
+             << F(" DEBUGFRAME ")  << DEBUGFRAME
+             << F(" DEBUGSTUPIDSLOW ")  << DEBUGSTUPIDSLOW
+             << endl;
 
       motors = new AccelStepperNoted*[motor_ct];
       for (int i = 0; i < motor_ct; i++) {
@@ -405,7 +412,7 @@ class AccelStepperShift : public BeginRun {
       const boolean hit_limit = motors[motor_i]->direction() && limit_switch(motor_i);
 
       if (hit_limit) {
-
+        
         recent_limit.reset(); // indicator duration
 
         if ( ! motors[motor_i]->at_limit) { // and not already at limit
@@ -451,7 +458,7 @@ class AccelStepperShift : public BeginRun {
           if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
-          // if (!all_done) Serial << F("  done ") << i << endl; // message as each motor finishes
+          // if (!all_done) Serial << F("  done ") << i << F(" to ") << motors[i]->currentPosition() << endl; // message as each motor finishes
         }
 
         //Serial << F("  motors at i done? ") << i << F(" ") << done << endl;
@@ -621,7 +628,7 @@ class AccelStepperShift : public BeginRun {
       }
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
-      # again, because the stop bit is always 0 in this bit-vector, i.e. finish the step pulse.
+      // again, because the stop bit is always 0 in this bit-vector, i.e. finish the step pulse.
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
       if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
       SPI.transfer(dir_copy, byte_ct); // this is "step pulse off"
@@ -672,7 +679,8 @@ class AccelStepperShift : public BeginRun {
       const int offset = (motor_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=2, frame2=3, etc
       const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 ..
 
-      return limit_switch_bit_vector[ byte_i ] & (1 << r_offset);
+      // open switch == pullup, so 0 is "limit hit"
+      return ! ( limit_switch_bit_vector[ byte_i ] & (1 << r_offset) );
     }
 
     void goto_limit() {

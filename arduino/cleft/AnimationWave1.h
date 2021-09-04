@@ -1,6 +1,6 @@
-#pragma once 
+#pragma once
 
-/* 
+/*
   A manager/protocol,
   and several animiations.
   I plan on an animation framework, so this is an interim solution.
@@ -11,9 +11,9 @@
 #include "AccelStepperShift.h"
 
 class Animation : public BeginRun {
-  // Protocol that Animations do.
-  // FIXME: move to own file, or will change w/real animation framework
-  // ALSO: manager for current_anmiation (class static)
+    // Protocol that Animations do.
+    // FIXME: move to own file, or will change w/real animation framework
+    // ALSO: manager for current_anmiation (class static)
 
   public:
     // keep track of your own state!
@@ -61,8 +61,6 @@ class AnimationWave1  : public Animation {
       i_for_phase = 0;
       cycles = 0;
 
-      // FIXME: each motor, set maxspeed and accel to achieve frequency for amplitude
-
       float cycle_length = 1.0 / frequency; // seconds per cycle
       int distance = 2 * amplitude; // how far we'll need to move
       // we'll accel half the distance, then decel half
@@ -71,10 +69,11 @@ class AnimationWave1  : public Animation {
       int accel = (2 * distance) / (time * time); // steps per sec
       int speed = accel * time; // final speed
 
-      // FIXME: annet liked it being not perfectly balanced
-      // I had set the right-half segments to some other max/accel (the default I think)
-      // so, re-add some? or do another animation w/systemic assymetries
       for (int i = 0; i < all_motors->motor_ct; i++) {
+        // FIXME: annet liked it being not perfectly balanced
+        // I had set the right-half segments to some other max/accel (the default I think)
+        // so, re-add some? or do another animation w/systemic assymetries
+        // try - i * 0.01 * speed
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
       }
@@ -99,6 +98,7 @@ class AnimationWave1  : public Animation {
         case Restart:
           restart();
           state = Starting;
+          return true;
           break;
 
         case Starting:
@@ -131,10 +131,12 @@ class AnimationWave1  : public Animation {
 
       if (start_next_phase()) {
         // at each phase, start the next motor
+        // "left" motors 0..1/2ct
         all_motors->motors[i_for_phase]->moveTo( amplitude );
+        // right motors ct..1/2ct (-1)
         all_motors->motors[all_motors->motor_ct - i_for_phase - 1]->moveTo( amplitude );
-        // FIXME: start the other 1/2 of the segments, where 0->max, 1->max-1, etc
-        Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << F(" & ") << (all_motors->motor_ct - i_for_phase - 1) << endl;
+        Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << F(" & ") << (all_motors->motor_ct - i_for_phase - 1)
+               << F(" to ") << amplitude << endl;
         Serial << F("L ") << all_motors->motors[i_for_phase]->currentPosition()
                << F(" R ") << all_motors->motors[i_for_phase]->currentPosition()
                << endl;
@@ -169,8 +171,6 @@ class AnimationWave1  : public Animation {
             all_motors->motors[all_motors->motor_ct - i - 1]->moveTo( - all_motors->motors[i]->currentPosition() );
             Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
-            // FIXME: and the other 1/2
-
             // only need to count cycles at motor[0]
             // FIXME: end of thing is when [0] hits cycle, then each time we hit max, aim for zero, till all end & zerod
             if (i == 0 ) {
@@ -179,7 +179,7 @@ class AnimationWave1  : public Animation {
               // so, really we do 1 + 1/4 cycles
               if (cycles >= (total_cycles * 2) + 1) {
                 state = Stopping;
-                Serial << F("AW stopping") << millis() << endl;
+                Serial << F("AW stopping ") << millis() << endl;
                 for (int ii = 0; ii < half_segments; ii++) {
                   all_motors->motors[ii]->moveTo( 0 ); // because we won't notice in Stopping for [0]
                   all_motors->motors[all_motors->motor_ct - ii - 1]->moveTo( 0 ); // because we won't notice in Stopping for [0]
@@ -379,7 +379,7 @@ class AnimationWave2  : public Animation {
 class AnimationFast : public Animation {
     // run real fast
   public:
-  // for the  smaller motor at 0.5A, 400 is about max (no microstep)
+    // for the  smaller motor at 0.5A, 400 is about max (no microstep)
     static constexpr int speed = 500; // steps per sec, about fastest I can run
     static constexpr int time_to_accel = 2; // secs
 

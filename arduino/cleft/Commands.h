@@ -70,7 +70,7 @@ class Commands : public BeginRun {
               // run an animation
               int animation_i = command - '1';
               Serial << F("restart animation ") << (animation_i + 1 ) << endl;
-              if (animation_i < Animation::animation_ct) {
+              if (animation_i < Animation::animation_ct && Animation::animations[animation_i] ) {
                 Animation::current_animation->state = Animation::Off;
                 Animation::current_animation = Animation::animations[animation_i];
                 Animation::current_animation->state = Animation::Restart;
