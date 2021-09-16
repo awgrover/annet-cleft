@@ -182,12 +182,10 @@ void setup() {
   builtin_neo.begin();
   // weirdly, the first set doesn't show
   builtin_neo.setBrightness(5); // too bright!
-  builtin_neo.setPixelColor(0, 0, 0, 255) ; // NEO_STATE_SETUP );
+  builtin_neo.setPixelColor(0, 0, 0, 255) ;
   builtin_neo.show();
   builtin_neo.setPixelColor(0, NEO_STATE_SETUP );
   builtin_neo.show();
-
-  // FIXME: use neopixel for serial indication: if (Serial) ...
 
   // allow other spi users
   SPI.begin();

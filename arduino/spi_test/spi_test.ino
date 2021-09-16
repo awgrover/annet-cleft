@@ -41,9 +41,9 @@
 // set to true to go slow (500ms between transfer), and printout values: easily seen blink
 #define SLOW 1
 // set to true for large delay between latch/etc
-#define SLOWLATCH 1
+#define SLOWLATCH 0
 
-constexpr int OUTCHIPS = 2;
+constexpr int OUTCHIPS = 4;
 constexpr int BITS_PER_MOTOR = 2;
 constexpr int MOTOR_CT = OUTCHIPS * 8 / BITS_PER_MOTOR; // nb: see REGISTER_CT, i.e. to get bytes divide by bits-per
 constexpr int REGISTER_CT = (int) ceil((float)MOTOR_CT * BITS_PER_MOTOR / 8);
@@ -51,7 +51,7 @@ constexpr int latch_pin = 12;
 constexpr int in_latch_pin = 11; // for the shift-in, is opposite sense
 constexpr int LATCHSTART = HIGH;
 constexpr int LATCHIDLE = ! LATCHSTART;
-constexpr int SLAVESELECT = 4; // samd21's don't need this
+constexpr int SPISELECT = 4; // samd21's don't need this, and we aren't doing selects
 
 constexpr int used_bits = 2;
 constexpr byte used_mask = (1 << used_bits) - 1;
@@ -82,8 +82,8 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, HIGH);
 
-  pinMode(SLAVESELECT, OUTPUT);
-  digitalWrite(SLAVESELECT, LOW); //release chip
+  pinMode(SPISELECT, OUTPUT);
+  digitalWrite(SPISELECT, LOW); //release chip
 
   Every fastblink(100);
   Timer serialtimeout(1500);
@@ -106,7 +106,41 @@ void loop() {
   //shift_write();
   //spi_read();
   //spi_read_write();
-  wiring_test();
+  spi_leakage_test(); // clean shifting?
+
+  //spi_wiring_test(); // use this one w/test-jig (spi)
+
+  /*
+    // runs 1 pin in a 500ms blink, to isolate signal lines
+    blink_pin(
+      // comment out all but the one of interest:
+      //latch_pin
+      //in_latch_pin
+      //ENABLE_PIN
+      //SCK
+      // // non pass through:
+      //MOSI
+      //MISO
+    );
+  */
+}
+
+void blink_pin(int pin) {
+  static boolean first_time = true;
+  if (first_time) {
+    pinMode(pin, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(pin, LOW);
+    first_time = false;
+  }
+
+  static Every::Toggle blink(500);
+  if (blink() ) {
+    digitalWrite(pin, blink.state);
+    digitalWrite(LED_BUILTIN, blink.state);
+
+    Serial << F("Blink ") << pin << F(" ") << millis() << endl;
+  }
 }
 
 void shift_write() {
@@ -352,7 +386,7 @@ void spi_read_write() {
   if (!SLOW) delay(10); // time for usb interrupt and stepper speed
 }
 
-void wiring_test() {
+void spi_wiring_test() {
   // Using SPI, and a jumper between A4/A5:
   // Show read of the shift-in (marking expected bits).
   // If jumper is open, rapid blink dir/step, and enable.
@@ -365,6 +399,7 @@ void wiring_test() {
     pinMode(JUMPER_PIN_X, OUTPUT);
     digitalWrite(JUMPER_PIN_X, LOW);
     pinMode(JUMPER_PIN, INPUT_PULLUP);
+    digitalWrite(latch_pin, LATCHIDLE);
     first_time = false;
   }
 
@@ -377,7 +412,7 @@ void wiring_test() {
   boolean jumper = ! digitalRead(JUMPER_PIN); // open=high
 
   if (! jumper) {
-    // open-jumper = all off
+    // open-jumper = blink all
 
     // off used-bits, on unused-bits
     out_bits = (0 & used_mask)  | (~0 & (frame_mask ^ used_mask));
@@ -398,41 +433,79 @@ void wiring_test() {
   }
   if (say_now) {
     Serial << endl;
-    Serial << F("Jumper ") << (jumper ? F("ON") : F("OFF")) << F(" frame "); dump_byte(out_bits); Serial << endl;
+    Serial << F("Jumper ") << (jumper ? F("ON") : F("OFF")) << F(" frame ");
+    dump_byte(out_bits);
+    Serial << F(" bytes ") << array_size(bit_vector)
+           << F(" Latch start ") << LATCHSTART
+           << F(" Latch idle ") << LATCHIDLE;
+    Serial << F("    ") << millis() << endl;
   }
 
   // cause shiftin to read inputs, allow shift-out
   digitalWrite(in_latch_pin, LOW);
   if (SLOWLATCH) delay(1);
   digitalWrite(in_latch_pin, HIGH);
-  if (SLOWLATCH) delay(1);
+  if (SLOWLATCH) delay(1); // time to read
 
-  // build a full byte
-  byte out_byte = 0;
-  for (int i = 0; i < 8 / BITS_PER_MOTOR; i++) {
-    if (jumper) {
-      // copying the last-cycle's input
-      // limit-switch is pulled high for open.
-      byte limit_switch = input_bit_vector[0] & (limit_switch_mask << i * BITS_PER_MOTOR);
-      
-      out_byte |= (limit_switch ? out_bits : (out_bits & ~1)) << (i * BITS_PER_MOTOR);
-      /* Serial << F("L ") << F(" "); dump_byte(out_byte);
-      Serial << F(" mask ") << _BIN(limit_switch_mask << i * BITS_PER_MOTOR)
-      << F(" @ ") << i << F(" ") << _BIN(limit_switch)
-      << F(" -> out "); dump_byte(out_byte);
-      Serial << endl;
-      */
-    }
-    else {
-      out_byte |= out_bits << (i * BITS_PER_MOTOR);
-    }
-  }
+  if (say_now) Serial << F("one byte ");
+
   // build bit_vector
   for (int i = 0; i < array_size(bit_vector); i++) {
+
+    // build a full byte
+    byte out_byte = 0;
+    for (int limit_i = 0; limit_i < 8 / BITS_PER_MOTOR; limit_i++) {
+      if (!jumper) {
+        // copying the last-cycle's input
+        // limit-switch is pulled high for open.
+        byte limit_switch = input_bit_vector[REGISTER_CT - 1 - i] & (limit_switch_mask << limit_i * BITS_PER_MOTOR);
+
+        out_byte |= (limit_switch ? out_bits : (out_bits & ~1)) << (limit_i * BITS_PER_MOTOR);
+
+        if (false && say_now) {
+          Serial << F("L ") << F(" "); dump_byte(out_byte);
+          Serial << F(" mask ") << _BIN(limit_switch_mask << limit_i * BITS_PER_MOTOR)
+                 << F(" @ ") << i << F(" ") << _BIN(limit_switch)
+                 << F(" -> out "); dump_byte(out_byte);
+          Serial << endl;
+        }
+
+      }
+      else {
+        out_byte |= out_bits << (limit_i * BITS_PER_MOTOR);
+      }
+
+    }
+    // mode0, latch to high
+    //  SPI_MODE doesn't seem relevant (all work except mode 2)
+    // limit switch leakage on 2nd chip
+    // which is bit_vector[-2], i.e. [2]
+    // despite out_bits being correct
+    // works chip[0] = 0
+    // leak each chip[1,3] = 0
+    // leak each chip[0,1,3] = ff
+    // leak all chip[0,1,3] = ff
+    // During the time it is supposed to be off:
+    // Appears to be seeing chip[0,1] values
+    //  which shouldn't show unless latch goes high
+    // With latch: go low, sees chip[3] value
+    //  which is a change from go-high. but...
+    // w/o latch changing: nothing happens
+    // Bad connection? if I touch ground it fixes. if I touch purple out, leaks
+    //if (i == OUTCHIPS - 1 - 1) out_byte = 0; // second register all 0's for testing    /if (i == 0) out_byte = 0; // second register all 0's for testing
+    //if (i != OUTCHIPS - 1 - 1) out_byte = 0xFF;
+    //else if (i < 1) out_byte = 0b10101010;
+    //else out_byte = 0;
+
     bit_vector[i] = out_byte;
+
+    if (say_now) {
+      dump_byte(out_byte); Serial << F("  ");
+    }
   }
+  if (say_now) Serial << endl;
+
   if (say_now) {
-    Serial << F("one byte "); dump_byte(out_byte); Serial << endl;
     Serial << F("out bits "); dump_bit_vector(bit_vector, array_size(bit_vector));
   }
 
@@ -442,6 +515,12 @@ void wiring_test() {
   // Also, reads-in to the bit_vector
   SPI.transfer(bit_vector, array_size(bit_vector));
 
+  SPI.endTransaction();
+
+  digitalWrite(latch_pin, LATCHSTART);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(latch_pin, LATCHIDLE);
+
   // And, capture the input
   // for the 74HC165, the inputs are read when latch is low (above)
   memcpy( input_bit_vector, bit_vector, array_size(bit_vector));
@@ -449,8 +528,7 @@ void wiring_test() {
     Serial << F("IN       "); dump_bit_vector(input_bit_vector);
   }
 
-  SPI.endTransaction();
-  digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+
 }
 
 void dump_bit_vector(byte *bytes, int byte_ct) {
