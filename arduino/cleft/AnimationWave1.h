@@ -136,8 +136,8 @@ class AnimationWave1  : public Animation {
         // right motors ct..1/2ct (-1)
         all_motors->motors[all_motors->motor_ct - i_for_phase - 1]->moveTo( amplitude );
         Serial << F("AW start i phase ") << millis() << F(" ") << i_for_phase << F(" & ") << (all_motors->motor_ct - i_for_phase - 1)
-               << F(" to ") << amplitude << endl;
-        Serial << F("L ") << all_motors->motors[i_for_phase]->currentPosition()
+               << F(" to ") << amplitude << F(" tp ") << all_motors->motors[i_for_phase]->targetPosition() << endl;
+        Serial << F("AW L ") << all_motors->motors[i_for_phase]->currentPosition()
                << F(" R ") << all_motors->motors[i_for_phase]->currentPosition()
                << endl;
 
@@ -145,7 +145,7 @@ class AnimationWave1  : public Animation {
 
         // till we've started everybody
         if (i_for_phase >= half_segments) {
-          Serial << F("AW running") << millis() << endl;
+          Serial << F("AW running ") << millis() << endl;
           state = Running;
         }
       }

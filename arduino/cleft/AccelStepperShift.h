@@ -244,6 +244,8 @@ class AccelStepperShift : public BeginRun {
     // for blinking indicators, i.e. leaves led on for at least this time
     Timer recent_step = Timer(200, false);
     Timer recent_limit = Timer(200, false);
+    Every check_fake_limit_pin = Every(500);
+    boolean ignore_limit_switches = false;
 
     // frame order is lsb:
     // unused-frames, led-bar, motor0 ... motorN
@@ -344,6 +346,12 @@ class AccelStepperShift : public BeginRun {
     }
 
     boolean run() {
+
+      // The jumper is for debugging time (see limit_switch):
+      if ( check_fake_limit_pin() ) {
+        ignore_limit_switches = ! digitalRead(fake_limit_pin); // pull up = open
+      }
+
       if ( run_all() ) {
         set_led_bar();
         shift_out();
@@ -408,22 +416,25 @@ class AccelStepperShift : public BeginRun {
       // limit switches are optional (when developing),
       // this adds about 50micros to the loop
 
+      // debugging: ignore because they might be floating and useless
+      if (ignore_limit_switches) return;
+
       // only while moving up
       // (we can always go past a limit on the way down)
       const boolean hit_limit = motors[motor_i]->direction() && limit_switch(motor_i);
 
       if (hit_limit) {
-        
+
         recent_limit.reset(); // indicator duration
 
         if ( ! motors[motor_i]->at_limit) { // and not already at limit
-
           // flag that we are atlimit or above
           // remember where we saw the switch
           motors[motor_i]->at_limit = true;
           motors[motor_i]->at_limit_pos = motors[motor_i]->currentPosition();
         }
         // and keep stopping
+        Serial << F("LIMIT ") << motor_i << endl;
         motors[motor_i]->stop(); // at current accel
       }
     }
@@ -462,7 +473,11 @@ class AccelStepperShift : public BeginRun {
           // if (!all_done) Serial << F("  done ") << i << F(" to ") << motors[i]->currentPosition() << endl; // message as each motor finishes
         }
 
+        //if ( motors[i]->currentPosition() != motors[i]->targetPosition() ) {
+        //  Serial << F("expected move " ) << i << F(" to ") << motors[i]->targetPosition() << endl;
+        //}
         //Serial << F("  motors at i done? ") << i << F(" ") << done << endl;
+
 
         if (false && DEBUGBITVECTOR > 0 && DEBUGBITVECTOR <= i && !all_done) {
           Serial

@@ -205,7 +205,8 @@ void setup() {
 
   // FIXME? shouldn't I have currentanimation.begin() here?
 
-  if (stepper_shift) stepper_shift->goto_limit();
+ if (stepper_shift) stepper_shift->goto_limit();
+  Serial << F(" GOTO LIMIT IS OFF") << endl;
 
   if (DEBUGMOVETEST) {
     Animation::current_animation->state = Animation::Off;
