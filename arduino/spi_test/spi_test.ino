@@ -528,6 +528,94 @@ void spi_wiring_test() {
     Serial << F("IN       "); dump_bit_vector(input_bit_vector);
   }
 
+}
+
+void spi_leakage_test() {
+  // Using SPI,
+  // put the test jig on 2nd board from arduino
+  // test if we are getting clean shifts
+  // i.e. the board only sees its byte.
+  // Enable bit blinks at 1sec
+  // Out bits toggle at 500msec
+  // And alternates random data on: bytes before, then bytes after
+  // So, no flicker/dim! Either for on or for off
+  // We do print the input vector.
+
+  static boolean first_time = true;
+  if (first_time) {
+    SPI.begin();
+    pinMode(ENABLE_PIN, OUTPUT);
+    pinMode(JUMPER_PIN_X, OUTPUT);
+    digitalWrite(JUMPER_PIN_X, LOW);
+    pinMode(JUMPER_PIN, INPUT_PULLUP);
+    digitalWrite(latch_pin, LATCHIDLE);
+    first_time = false;
+  }
+
+  static Every::Toggle say(500);
+  boolean say_now = say();
+
+  // heartbeat in enable pin
+  static Every::Toggle polarity(1000); // best if odd multiple of say's time
+  boolean blink_now = polarity(); // test to trigger
+  digitalWrite(ENABLE_PIN, polarity.state);
+
+  boolean jumper = ! digitalRead(JUMPER_PIN); // open=high
+
+  // chip [1] (wire sequence) is byte[-2) is [3]
+  // i.e. reverse order
+  bit_vector[2] = polarity.state ? 0xFF : 0;
+
+  if (say.state) {
+    // open-jumper = random on chip [3], 0's on [1,2,3]
+    // So, does [1] see [0]?
+    bit_vector[3] = random(0, 255);
+    bit_vector[2] = bit_vector[0] = 0;
+  }
+  else {
+    // closed-jumper = random on chip [2,3], 0's on chip [0]
+    // So, does [1] see [2,3]?
+    bit_vector[0] = random(0, 255);
+    bit_vector[1] = random(0, 255);
+    bit_vector[3] = 0;
+  }
+
+  if (say_now) {
+    Serial << endl;
+    Serial << F("Jumper ") << (jumper ? F("ON") : F("OFF")) << F(" frame ");
+    Serial << F(" bytes ") << array_size(bit_vector)
+           << F("    ") << millis() << endl;
+    Serial << F("OUT      ");
+    dump_bit_vector(bit_vector, array_size(bit_vector));
+
+  }
+
+  // cause shiftin to read inputs, allow shift-out
+  // (not used in this test)
+  digitalWrite(in_latch_pin, LOW);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(in_latch_pin, HIGH);
+  if (SLOWLATCH) delay(1); // time to read
+
+
+  SPI.beginTransaction(SPISettings(SLOW ? 1000 : 1000000, MSBFIRST, SPI_MODE0));
+  // sends 0...[n-1] [n], no matter what MSB/LSB first is!
+  // so, nearest shift-register is [n]
+  // Also, reads-in to the bit_vector
+  SPI.transfer(bit_vector, array_size(bit_vector));
+
+  SPI.endTransaction();
+
+  digitalWrite(latch_pin, LATCHSTART);
+  if (SLOWLATCH) delay(1);
+  digitalWrite(latch_pin, LATCHIDLE);
+
+  // And, capture the input
+  // for the 74HC165, the inputs are read when latch is low (above)
+  memcpy( input_bit_vector, bit_vector, array_size(bit_vector));
+  if (say_now) {
+    Serial << F("IN       "); dump_bit_vector(input_bit_vector);
+  }
 
 }
 

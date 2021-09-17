@@ -31,7 +31,8 @@
 // 3 to print on shift-out
 //#define DEBUGLOGBITVECTOR 3
 // print position of each motor on each step if true
-//#define DEBUGPOSPERSTEP 1
+// when false, we get no output for fast movements
+#define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
