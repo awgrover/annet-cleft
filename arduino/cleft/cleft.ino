@@ -181,6 +181,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, LOW);
 
   Serial << endl;
+  Serial << F(__FILE__) << F(" ") << F(__DATE__) << F(" ") << F(__TIME__) << endl;
   // This prefix should be first, for memory/millis
   Serial << F("Start free ") << base_memory << endl;
   Serial << F("After Serial.begin ") << freeMemory() << endl;

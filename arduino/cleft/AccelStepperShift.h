@@ -460,8 +460,8 @@ class AccelStepperShift : public BeginRun {
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
 
-        // ->run is about 4000 micros for 15 motors @ 8MHz clock
-        // got about 1800 micros @ 48mhz (so about 550 steps/sec max)
+        // ->run was about 4000 micros for 15 motors @ 8MHz clock (had extra debugging?)
+        // got about 334 micros @ 48mhz (so about 3000 steps/sec max)
         // NB. AccelStepper thinks the protocol is:
         //    step(), if that was last step then ->run() will return false
         // Which means we will not see run()==true for the last step. thus do_step() instead:
