@@ -47,6 +47,7 @@ void setup() {
   println("? starts tracking arduino");
   println("r closes/reopens arduino port");
   println("x closes arduino port");
+  println("q synchronizes position with arduino");
   println("h tells arduino to home");
   println("u tells arduino all up to 0.5 meters");
   println("shift 1..9 (re)starts animation 1..9");
@@ -129,6 +130,7 @@ void connect_to_arduino() {
       arduino_port.bufferUntil(10); // lf
       delay(500);
       arduino_port.write("?"); // evoke helo
+      arduino_port.write("Q"); // synch
     }
   }
 }
@@ -210,6 +212,8 @@ void keyPressed() {
       arduino_port.write("Q0");
     } else if (key == 'u') { 
       arduino_port.write("Qu");
+    } else if (key == 'q') { 
+      arduino_port.write("Q");
     } else if (key == 'r') {
       if (arduino_port != null) { 
         arduino_port.stop();
