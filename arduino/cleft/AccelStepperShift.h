@@ -604,7 +604,9 @@ class AccelStepperShift : public BeginRun {
       memcpy( limit_switch_bit_vector, step_bit_vector, byte_ct * sizeof(byte));
 
       // read input pins, allow shift-in (5ns? 1000ns? for low to read)
-      digitalWrite(shift_load_pin, LOW); delayMicroseconds(1); digitalWrite(shift_load_pin, HIGH); delayMicroseconds(1);
+      digitalWrite(shift_load_pin, SH_LD_LOAD); // we cound on digitalWrite being sloooow
+      digitalWrite(shift_load_pin, SH_LD_IDLE);
+      delayMicroseconds(1); // probably not necessary
 
       // use beginTransaction() to be friendly to other spi users (& disable interrupts!)
       // MSBFIRST affects read and write
@@ -612,12 +614,14 @@ class AccelStepperShift : public BeginRun {
 
       // Each transfer reads the input shift-register too, but we capture on the 2nd one
 
+      // the driver wants the DIR bits to be set before a STEP pulse:
       if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
       SPI.transfer(dir_copy, byte_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
+      // STEP pulses to high (with same DIR)
       // Out (limit_switch_bit_vector) is a copy of step_bit_vector
       // Here's where we capture the limit-switches, back into limit_switch_bit_vector.
       if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(limit_switch_bit_vector);

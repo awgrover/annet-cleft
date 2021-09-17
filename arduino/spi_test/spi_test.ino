@@ -82,6 +82,7 @@ void setup() {
   pinMode(ENABLE_PIN, OUTPUT);
   digitalWrite(ENABLE_PIN, HIGH);
 
+  // not actually used by us
   pinMode(SPISELECT, OUTPUT);
   digitalWrite(SPISELECT, LOW); //release chip
 
@@ -476,26 +477,6 @@ void spi_wiring_test() {
       }
 
     }
-    // mode0, latch to high
-    //  SPI_MODE doesn't seem relevant (all work except mode 2)
-    // limit switch leakage on 2nd chip
-    // which is bit_vector[-2], i.e. [2]
-    // despite out_bits being correct
-    // works chip[0] = 0
-    // leak each chip[1,3] = 0
-    // leak each chip[0,1,3] = ff
-    // leak all chip[0,1,3] = ff
-    // During the time it is supposed to be off:
-    // Appears to be seeing chip[0,1] values
-    //  which shouldn't show unless latch goes high
-    // With latch: go low, sees chip[3] value
-    //  which is a change from go-high. but...
-    // w/o latch changing: nothing happens
-    // Bad connection? if I touch ground it fixes. if I touch purple out, leaks
-    //if (i == OUTCHIPS - 1 - 1) out_byte = 0; // second register all 0's for testing    /if (i == 0) out_byte = 0; // second register all 0's for testing
-    //if (i != OUTCHIPS - 1 - 1) out_byte = 0xFF;
-    //else if (i < 1) out_byte = 0b10101010;
-    //else out_byte = 0;
 
     bit_vector[i] = out_byte;
 
