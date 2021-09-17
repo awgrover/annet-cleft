@@ -133,7 +133,14 @@ Animation* Animation::current_animation = animation;
 // this list is only for serial commands (see Commands), to pick an animation.
 Animation* Animation::animations[] = {
   animation,
-  new AnimationWave2( // the cute wave "@"
+  new AnimationWave2( // the failed cute wave "@"
+    stepper_shift,
+    5, // segments
+    0.25, // max amplitude
+    1, // frequency
+    1 // cycles
+  ),
+  new AnimationWaveCute( // the cute wave "#"
     stepper_shift,
     5, // segments
     0.25, // max amplitude
@@ -205,7 +212,7 @@ void setup() {
 
   // FIXME? shouldn't I have currentanimation.begin() here?
 
- if (stepper_shift) stepper_shift->goto_limit();
+  //if (stepper_shift) stepper_shift->goto_limit();
   Serial << F(" GOTO LIMIT IS OFF") << endl;
 
   if (DEBUGMOVETEST) {
@@ -218,7 +225,7 @@ void setup() {
 
 void serial_begin(unsigned long baud) {
   // Non-integrated USB (e.g. Uno) doesn't need a test of: `while (!Serial)`.
-  // Integrated USB does (e.g. samd21 etc), 
+  // Integrated USB does (e.g. samd21 etc),
   //  * but `Serial` only goes true if usb is actually hooked up
   //  * and if the arduino gets hung (e.g. memory corruption), it may be very
   //    difficult to get it to respond to a new upload.
@@ -227,7 +234,7 @@ void serial_begin(unsigned long baud) {
   Every fastblink(100);
   Timer serialtimeout(1500); // should be plenty of time
 
-  Serial.begin(baud); 
+  Serial.begin(baud);
   // timeout if Serial never goes true (integrated USB & not connected).
   while (! ( Serial || serialtimeout() )) {
     if (fastblink()) digitalWrite(LED_BUILTIN, ! digitalRead(LED_BUILTIN));
@@ -238,7 +245,7 @@ void serial_begin(unsigned long baud) {
   }
   else {
     digitalWrite(LED_BUILTIN, LOW); // not that informative, heartbeat will quickly change this.
-    }
+  }
 }
 
 void loop() {
@@ -249,7 +256,7 @@ void loop() {
   const unsigned long last_micros = micros(); // top of loop
 
   heartbeat(NEO_STATE_LOOPING);
-  
+
   // Run each object/module/system
   for (BeginRun* a_system : systems) {
     if ( a_system ) { // skip NULLs
@@ -293,7 +300,7 @@ void heartbeat(const uint32_t color) {
     builtin_neo.show();
   }
 }
-  
+
 /*
 
   Left this here to remind me about the animation framework that isn't done yet.
