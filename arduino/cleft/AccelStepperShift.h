@@ -31,8 +31,8 @@
 // 3 to print on shift-out
 //#define DEBUGLOGBITVECTOR 3
 // print position of each motor on each step if true
-// when false, we get no output for fast movements
-#define DEBUGPOSPERSTEP 1
+// If you see no steps, maybe you need the debug-jumper to fake limit switches?
+#define DEBUGPOSPERSTEP 0
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
@@ -240,7 +240,8 @@ class AccelStepperShift : public BeginRun {
     const int total_frames;
 
     AccelStepperNoted** motors; // an [motor_ct] of them
-
+    boolean all_done = false; // goes true when all motors finish their targets
+    
     // for blinking indicators, i.e. leaves led on for at least this time
     Timer recent_step = Timer(200, false);
     Timer recent_limit = Timer(200, false);
@@ -445,7 +446,6 @@ class AccelStepperShift : public BeginRun {
       // return true if ANY ran (have to shift all bits)
       // We should be overwriting the whole bit-vector buffer(s), all bits
 
-      static boolean all_done = false; // for debug messages FIXME
       static int step_count = 0; // for debug, see DEBUGSTOPAFTER
 
       static Every say_pos(100);
@@ -456,7 +456,7 @@ class AccelStepperShift : public BeginRun {
 
       //Serial << F("run all, already all_done? ") << all_done << endl;
 
-      boolean done = true;
+      boolean done = true; // is everybody finished on this loop?
       for (int i = 0; i < motor_ct; i++) {
         stop_at_limit(i);
 
@@ -706,6 +706,8 @@ class AccelStepperShift : public BeginRun {
     void goto_limit() {
       // move all motors to the limit switch
       // skip this if no limit switches
+      if (! digitalRead(fake_limit_pin)) return;
+      
       boolean doing_fake_limit = false; // fake all limit switch if jumper on FAKE_LIMIT_PIN
 
       Serial << F("Goto LIMITUP") << endl;

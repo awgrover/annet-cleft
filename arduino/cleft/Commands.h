@@ -2,11 +2,11 @@
 
 #include "begin_run.h"
 #include "AccelStepperShift.h"
-#include "AnimationWave1.h"
+#include "Animation.h"
 
 class Commands : public BeginRun {
-  // Respond to commands on the serial port, mostly for demo & debug
-  
+    // Respond to commands on the serial port, mostly for demo & debug
+
   public:
     AccelStepperShift* all_motors;
 
@@ -23,12 +23,14 @@ class Commands : public BeginRun {
         char command = Serial.read();
         Serial << F("* ") << command << endl; // echo
 
+        // reserve upper-case for other systems
+
         switch (command) {
           case '?': // are you there?
             Serial << F("<S") << endl; // yes
             break;
 
-          case 'Q': // tell positions
+          case 'q': // tell positions
             Serial << F("Homing") << endl;
             Animation::current_animation->state = Animation::Off;
             for (int i = 0; i < all_motors->motor_ct; i++) {
@@ -43,7 +45,18 @@ class Commands : public BeginRun {
               all_motors->motors[i]->moveTo( 0 );
             }
             break;
-          
+
+          case 'x': // stop animation
+            Serial << F("STOP") << endl;
+            allow_random = false;
+            for (int i = 0; i < all_motors->motor_ct; i++) {
+              all_motors->motors[i]->setAcceleration(2000);
+              all_motors->motors[i]->move( 0 );
+              all_motors->motors[i]->stop();
+            }
+            Animation::current_animation->state = Animation::Off;
+            break;
+
           case 'u': // stop animation, goto up
             Serial << F("Upping") << endl;
             Animation::current_animation->state = Animation::Off;
@@ -68,6 +81,8 @@ class Commands : public BeginRun {
           default:
             if (command >= '1' && command <= '9') {
               // run an animation
+              allow_random = true;
+              
               int animation_i = command - '1';
               Serial << F("restart animation ") << (animation_i + 1 ) << endl;
               if (animation_i < Animation::animation_ct && Animation::animations[animation_i] ) {
@@ -77,11 +92,18 @@ class Commands : public BeginRun {
                 Serial << F("  animation is ") << ((long) Animation::current_animation)
                        << F(" @ ") << Animation::current_animation->state
                        << endl;
+                break;
               }
               else {
                 Serial << F("No Such Animation") << endl;
               }
             }
+            else if ( Animation::current_animation && Animation::current_animation->commands( command ) ) {
+              Serial << F("Handled by ") << ((long) Animation::current_animation) << endl;
+              break;
+            }
+
+            Serial << F("wat ") << command << F("currenta? ") << (!! Animation::current_animation ) << endl;
             return false; // not handling a command is false
         }
 

@@ -88,6 +88,8 @@ const uint32_t NEO_OFF = Adafruit_NeoPixel::Color(0, 0, 0); // off
 const uint32_t NEO_STATE_LOOPING = Adafruit_NeoPixel::Color(0, 255, 0); // Green (blink)
 const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Orange (blink)
 
+static boolean allow_random = true; // enable idle random animations
+
 // NB: a #include list is magically done by arduino-ide of extant .h files
 //  and it is alphabetical, so this order is not relevant
 //  and, in fact, is redundant for arduino-ide
@@ -98,6 +100,8 @@ const uint32_t NEO_STATE_UPLIMIT = Adafruit_NeoPixel::Color(255, 165, 0); // Ora
 #include "AccelStepperShift.h"
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
+#include "AnimationTest.h"
+
 #include "Commands.h"
 
 // if true: no initial move-to-uplimit, instead +|- move up 2, down 2
@@ -113,6 +117,8 @@ constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
 constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
 constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
 
+constexpr unsigned long ATTRACTOR_IDLE = 30UL*1000UL; // pick an animation if we have been idle
+
 // SYSTEMS
 // Things that setup, and run during loop. See begin_run.h.
 // We run them via systems[] (below)
@@ -120,19 +126,16 @@ constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
 // When testing/developing, you can set these to NULL to skip using them
 AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN, FAKE_LIMIT_PIN, FAKE_LIMIT_PIN_X);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT); // later
-AnimationWave1* animation = new AnimationWave1( // moving sine wave
-  stepper_shift,
-  0.15, // amplitude meters
-  0.5, // wavelength fraction that fits in 1/2 of cleft
-  0.25, // frequency
-  1 // cycles
-);
-
-Animation* Animation::current_animation = animation;
 
 // this list is only for serial commands (see Commands), to pick an animation.
 Animation* Animation::animations[] = {
-  animation,
+  new AnimationWave1( // moving sine wave '!'
+    stepper_shift,
+    0.15, // amplitude meters
+    0.5, // wavelength fraction that fits in 1/2 of cleft
+    0.25, // frequency
+    1 // cycles
+  ),
   new AnimationWave2( // the failed cute wave "@"
     stepper_shift,
     5, // segments
@@ -147,10 +150,13 @@ Animation* Animation::animations[] = {
     1, // frequency
     1 // cycles
   ),
-  NULL, NULL, NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL, NULL,
+  new AnimationMotorTests(stepper_shift), // 8
   new AnimationFast(stepper_shift), // 9
 };
 const int Animation::animation_ct = array_size(animations);
+// 1st animation
+Animation* Animation::current_animation = Animation::animations[2]; // cute first
 
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
 // When testing/developing, you can set these to NULL to skip using them
@@ -158,7 +164,7 @@ BeginRun* systems[] = {
   // all null: 9micros @ 8MHz 32u4
   stepper_shift,  // idle: 350micros @ 8MHz 32u4 1164 bytes used
   // runall: 300micros @48Mhz samd21 1620 used
-  // idle: 78micros @48Mhz
+  // idle: 100micros @48Mhz
   //// NB Animation::current_animation, NEVER goes in here. sad
   new Commands(stepper_shift),
 };
@@ -213,8 +219,8 @@ void setup() {
 
   // FIXME? shouldn't I have currentanimation.begin() here?
 
-  //if (stepper_shift) stepper_shift->goto_limit();
-  Serial << F(" GOTO LIMIT IS OFF") << endl;
+  if (stepper_shift) stepper_shift->goto_limit();
+  //Serial << F(" GOTO LIMIT IS OFF") << endl;
 
   if (DEBUGMOVETEST) {
     Animation::current_animation->state = Animation::Off;
@@ -253,6 +259,7 @@ void loop() {
   // track loop time (in microseconds)
   static Every say_status(1000);
   static ExponentialSmooth<unsigned long> elapsed(5);
+  static Every start_idle(ATTRACTOR_IDLE);
   static unsigned long last_elapsed = 0;
   const unsigned long last_micros = micros(); // top of loop
 
@@ -268,11 +275,27 @@ void loop() {
   // FIXME
   if (Animation::current_animation) Animation::current_animation->run();
 
+  // idle animation
+  // wait some duration after !is_running (Timer)
+  if ( Animation::current_animation->is_runnning() ) {
+    start_idle.reset();
+  }
+  else if (allow_random && start_idle()) {
+    int allowed[] = { 0, 2 }; // big wave & cute wave
+    int which = allowed[ random( array_size( allowed ) ) ];
+
+    Animation::current_animation = Animation::animations[which];
+    Animation::current_animation->state = Animation::Restart;
+    Serial << F("  animation is ") << which << F(" ") << ((long) Animation::current_animation)
+           << F(" @ ") << Animation::current_animation->state
+           << endl;
+  }
+
   // let a system clean up from the state of one loop
   // i.e. systems might check each other for a per-loop state
   // e.g. AccelStepperNote sets do_step if it wants a step this loop
-  for (BeginRun* a_system : systems) {
-    if ( a_system ) { // skip NULLs
+for (BeginRun* a_system : systems) {
+  if ( a_system ) { // skip NULLs
       a_system->finish_loop();
     }
   }
@@ -285,11 +308,11 @@ void loop() {
   elapsed.average( elapsed_micros  );
 
   if ( say_status() && last_elapsed != elapsed.value() ) {
-    Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
-           << F(" animation ") << ( (long) Animation::current_animation)
-           << endl;
-    last_elapsed = elapsed.value();
-  }
+      Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
+             << F(" animation ") << ( (long) Animation::current_animation)
+             << endl;
+      last_elapsed = elapsed.value();
+    }
 }
 
 void heartbeat(const uint32_t color) {

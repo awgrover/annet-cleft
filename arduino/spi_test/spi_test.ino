@@ -107,9 +107,10 @@ void loop() {
   //shift_write();
   //spi_read();
   //spi_read_write();
-  spi_leakage_test(); // clean shifting?
+  
+  //spi_leakage_test(); // clean shifting? use with jig
 
-  //spi_wiring_test(); // use this one w/test-jig (spi)
+  spi_wiring_test(); // use this one w/test-jig (spi)
 
   /*
     // runs 1 pin in a 500ms blink, to isolate signal lines

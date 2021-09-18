@@ -130,7 +130,7 @@ void connect_to_arduino() {
       arduino_port.bufferUntil(10); // lf
       delay(500);
       arduino_port.write("?"); // evoke helo
-      arduino_port.write("Q"); // synch
+      arduino_port.write("q"); // synch
     }
   }
 }
@@ -209,11 +209,11 @@ void keyPressed() {
     } else if (key == '-') {
       arduino_tracking = false;
     } else if (key == 'h') { 
-      arduino_port.write("Q0");
+      arduino_port.write("q0");
     } else if (key == 'u') { 
-      arduino_port.write("Qu");
+      arduino_port.write("qu");
     } else if (key == 'q') { 
-      arduino_port.write("Q");
+      arduino_port.write("q");
     } else if (key == 'r') {
       if (arduino_port != null) { 
         arduino_port.stop();

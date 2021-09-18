@@ -1,44 +1,8 @@
-#pragma once
+/* animations using the Animation protocol
+ *  
+ */
 
-/*
-  A manager/protocol,
-  and several animiations.
-  I plan on an animation framework, so this is an interim solution.
-*/
-
-#include "every.h"
-#include "begin_run.h"
-#include "AccelStepperShift.h"
-
-class Animation : public BeginRun {
-    // Protocol that Animations do.
-    // FIXME: move to own file, or will change w/real animation framework
-    // ALSO: manager for current_anmiation (class static)
-
-  public:
-    // keep track of your own state!
-    // FIXME: document which are public states
-    enum State { Restart, Starting, Running, Stopping, Idle, Off };
-
-    // Which animation we are running
-    static Animation* current_animation;
-    static Animation* animations[];
-    static const int animation_ct;
-
-    AccelStepperShift* const all_motors; // ->motors[] of AccelStepper
-    State state = Restart;
-
-    Animation(AccelStepperShift* all_motors) : all_motors(all_motors) {}
-
-    void mirror_moveTo( int left_i, int amplitude) {
-      // moves motor [left_i] and the mirror'd right side the same
-
-      all_motors->motors[left_i]->moveTo( amplitude );
-      all_motors->motors[ all_motors->motor_ct - left_i - 1 ]->moveTo( amplitude );
-      Serial << F("Move ") << left_i << F( " / " ) << (all_motors->motor_ct - left_i - 1) << F(" TO ") << amplitude << endl;
-    }
-
-};
+#include "Animation.h"
 
 class AnimationWave1  : public Animation {
   public:
@@ -545,84 +509,5 @@ class AnimationWaveCute  : public Animation {
       float fraction = (segments - motor_i) / (float) segments;
       int max_amp = amplitude * fraction;
       return top ? max_amp : (fraction * (amplitude / 2));
-    }
-};
-
-class AnimationFast : public Animation {
-    // run real fast
-  public:
-    // for the  smaller motor at 0.5A, 400 is about max (no microstep)
-    static constexpr int speed = 500; // steps per sec, about fastest I can run
-    static constexpr int time_to_accel = 2; // secs
-
-    AnimationFast(AccelStepperShift* all_motors)
-      : Animation(all_motors)
-    {
-    }
-
-    void restart() {
-      Serial << F("AF start ") << ((long) this) << endl;
-
-      // Want to get up to speed, run for 1 second, then decl
-      int accel = speed / time_to_accel; // accel to speed in 2 second
-      int distance_while_accelerating = accel / 2 * time_to_accel * time_to_accel;
-      int total_distance = 2 * distance_while_accelerating + speed;
-
-      // initial target is the max-amplitude of each segment
-      for (int i = 0; i < all_motors->motor_ct; i++) {
-        all_motors->motors[i]->setMaxSpeed(speed);
-        all_motors->motors[i]->setAcceleration(accel);
-        all_motors->motors[i]->move( total_distance );
-      }
-    }
-
-    void begin() {
-    }
-
-    boolean run() {
-      switch (state) {
-        case Restart:
-          restart();
-          state = Running;
-          break;
-
-        case Starting:
-          startup();
-          return true;
-          break;
-
-        case Running:
-          running();
-          return true;
-          break;
-
-        case Stopping:
-          stopping();
-          return true;
-          break;
-
-        case Idle:
-          break;
-
-        case Off:
-          // don't restart
-          break;
-      }
-      return false; // IFF working
-    }
-
-    void startup() {
-      // Nothing to do, just run
-      Serial << F("FAIL: should do startup") << endl;
-      delay(500);
-    }
-
-    void running() {
-
-      // Nothing to do, just run
-    }
-
-    void stopping() {
-      // we never get here
     }
 };
