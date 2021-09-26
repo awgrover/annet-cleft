@@ -7,7 +7,7 @@ class BeginRun {
     virtual void begin() = 0;
     virtual boolean run() = 0; // should return true if you are "running"
     virtual void finish_loop() {}; // default to nothing at end of loop
-    
+
     class Noop; // the noop version, subclass of BeginRun
 };
 

@@ -8,20 +8,21 @@
   Every::Toggle will keep track of a toggling boolean for you.
 
   * Every n millis
+
   
     static Every t1(100);  // every 100 msec
     
     if ( t1() ) { do it; }
 
     * Details
-      The "every" objet has to be static/global, obviously because it needs to remember the "last" time.
+      The "every" object has to be static/global, obviously because it needs to remember the "last" time.
       
-      The object + "()" is magic: returns a boolean meaning "expired?" (and restarts for the next interval.
+      The object + "()" is magic: returns a boolean meaning "just expired?" (and restarts for the next interval.
 
       The initial event does not happen immediately, it happens in n msec. If you want an immediate first
       event, supply "true" for the "now" argument in the constructors: Every(100, true). 
 
-      The interval  can be up to 2^32 msecs (full range of millis()). Sadly, that's 4 bytes.
+      The interval can be up to 2^32 msecs (full range of millis()). Sadly, that's 4 bytes.
 
       Takes 8 bytes of RAM for "Every" object.
       
@@ -31,8 +32,10 @@
       amounts of drift, this is probably nice. For larger amounts, might be confusing (see Timer). 
 
       There's no suspend/stop. That would add at least 1 boolean more memory!
-      
-  * Toggle every n millis
+
+      See examples/Every
+
+# Example Toggle every n millis
 
     // "blink" example using EveryToggle
     Every::Toggle t1(200); // adds the .state() method
@@ -179,33 +182,33 @@ class Every {
 class Every::Toggle : public Every { // not really a ...Sequence
   public:
 
-  boolean state = false; // because if(every()) will ! befor you get sequence
+    boolean state = false; // because if(every()) will ! befor you get sequence
 
-  Toggle(bool now = false) : Every(now) {}
-  Toggle(int interval, bool now = false) : Every( (unsigned long) interval, now) {}
-  Toggle(unsigned long interval, bool now = false) : Every( interval, now ) {}
-    
-   using Every::operator(); // in every subclass if you add a ()
-   
-   boolean operator()() {
-      if (Every::operator()()) {
-        state = !state;
-        return true;
+    Toggle(bool now = false) : Every(now) {}
+    Toggle(int interval, bool now = false) : Every( (unsigned long) interval, now) {}
+    Toggle(unsigned long interval, bool now = false) : Every( interval, now ) {}
+      
+     using Every::operator(); // in every subclass if you add a ()
+     
+     boolean operator()() {
+        if (Every::operator()()) {
+          state = !state;
+          return true;
+        }
+        return false;
       }
-      return false;
-    }
 
-    /*
-     * Yikes, don't know how to receive a lambda with args, the base class's matches before we do
-    // lambda will get the state!
-    template <typename T>
-    boolean operator()(T lambdaF(const bool state) ) {
-      // return value is ignored from the lambda
-      boolean hit = (*this)();
-      if (hit) (*lambdaF)(this->state);
-      return hit;
-    }
-    */
+      /*
+       * Yikes, don't know how to receive a lambda with args, the base class's matches before we do
+      // lambda will get the state!
+      template <typename T>
+      boolean operator()(T lambdaF(const bool state) ) {
+        // return value is ignored from the lambda
+        boolean hit = (*this)();
+        if (hit) (*lambdaF)(this->state);
+        return hit;
+      }
+      */
 
 };
 
@@ -220,7 +223,7 @@ class Every::Pattern : public Every {
   public:
     unsigned int seq_count;
     const unsigned long *_pattern;
-    unsigned int pattern_i = 0; // because if(every()) will increment before you get pattern()
+    unsigned int state = 0; // because if(every()) will increment before you get pattern()
 
     // captures the pattern!
     Pattern(const unsigned int seq_count, const unsigned long pattern[], bool now = false)
@@ -238,23 +241,19 @@ class Every::Pattern : public Every {
     this->interval = _pattern[0];
     }
 
-    int sequence() {
-      return pattern_i;
-    }
-
     boolean operator()() {
       boolean hit = Every::operator()();
       //DEBUG << "test " << hit << endl;
       if (hit) {
-        pattern_i = (pattern_i + 1) % seq_count;
-        interval = _pattern[pattern_i];
+        state = (state + 1) % seq_count;
+        interval = _pattern[state];
       }
       return hit;
     }
 
     virtual void reset(boolean now=false) {
-      pattern_i = 0;
-      interval = _pattern[pattern_i];
+      state = 0;
+      interval = _pattern[state];
       Every::reset(now);
     }
 
@@ -263,74 +262,6 @@ class Every::Pattern : public Every {
       // return value is ignored from the lambda
       boolean hit = (*this)();
       if (hit) (*lambdaF)();
-      return hit;
-    }
-};
-
-class EveryCount : public Every { // 0..n-1
-  public:
-   int count;
-   int state = -1; // because if(every()) will +1 befor you get sequence
-    EveryCount(unsigned long interval, int count, bool now = false)
-      : Every{interval, now}, count(count) {}
-
-    
-   using Every::operator(); // in every subclass if you add a ()
-   
-   boolean operator()() {
-      if (Every::operator()()) {
-        state = ( state + 1 ) % count;
-        return true;
-      }
-      return false;
-    }
-
-    
-    /*
-     * Yikes, don't know how to receive a lambda with args, the base class's matches before we do
-    // lambda will get the state!
-    template <typename T>
-    boolean operator()(T lambdaF(const bool state) ) {
-      // return value is ignored from the lambda
-      boolean hit = (*this)();
-      if (hit) (*lambdaF)(this->state);
-      return hit;
-    }
-    */
-
-};
-
-
-template <typename T>
-class Every2Sequence : public Every {
-    // has sequence -> ....
-  public:
-    int seq_count;
-    const T *_sequence;
-    unsigned int sequence_i = -1; // because if(every()) will increment before you get sequence()
-
-    constexpr static int _toggle[] = {0, 1}; // default boolean sequence
-
-    // captures the sequence!
-    Every2Sequence(unsigned int interval, const int seq_count, const T sequence[], bool now = false)
-      : Every{interval, now}, seq_count(seq_count), _sequence(sequence)
-    {}
-
-    // for toggles, it's just:
-    Every2Sequence(unsigned int interval, bool now = false)
-      : Every{interval, now}, seq_count(2), _sequence(_toggle)
-    {}
-
-    T sequence() {
-      return _sequence[sequence_i];
-    }
-
-    boolean operator()() {
-      boolean hit = Every::operator()();
-      //DEBUG << "test " << hit << endl;
-      if (hit) {
-        sequence_i = (sequence_i + 1) % seq_count;
-      }
       return hit;
     }
 };
@@ -396,68 +327,4 @@ class Timer { // True, once, after n millis
       }
     void reset(int interval) { this->interval=(unsigned long) interval; reset(); }
     void reset(unsigned long interval) { this->interval=interval; reset(); }
-};
-
-class NTimes {
-  public:
-    // everthing public
-    unsigned long count = 1; // number of times to fire
-
-    NTimes(unsigned long n) : count(n) {}
-
-    virtual boolean operator()() {
-      if (count > 0) {
-        count -= 1;
-        return true;
-      }
-      else {
-        return false;
-      }
-    }
-
-    template <typename T>
-    boolean operator()(T lambdaF ) {
-      // simple lambda: []() { do something };
-      boolean hit = (*this)();
-      if (hit) lambdaF();
-      return hit;
-    }
-
-    // the 'virtual' prevents optimizing away an unused 'interval' instance-var
-    virtual void reset(unsigned long n) {
-      this->count = n;
-    }
-};
-
-class NthTime {
-  public:
-    // everthing public
-    unsigned long original_count = 1; // fire on nth
-    unsigned long count = 1; // count till next fire
-
-    NthTime(unsigned long n) : original_count(n), count(n) {}
-
-    virtual boolean operator()() {
-      if (count > 0) {
-        count -= 1;
-        return false;
-      }
-      else {
-        count = original_count;
-        return true;
-      }
-    }
-
-    template <typename T>
-    boolean operator()(T lambdaF ) {
-      // simple lambda: []() { do something };
-      boolean hit = (*this)();
-      if (hit) lambdaF();
-      return hit;
-    }
-
-    // the 'virtual' prevents optimizing away an unused 'interval' instance-var
-    virtual void reset(unsigned long n) {
-      this->original_count = this->count = n;
-    }
 };

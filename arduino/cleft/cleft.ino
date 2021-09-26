@@ -98,6 +98,7 @@ static boolean allow_random = true; // enable idle random animations
 #include "array_size.h"
 #include "ExponentialSmooth.h"
 #include "AccelStepperShift.h"
+#include "begin_run.h"
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
 #include "AnimationTest.h"
