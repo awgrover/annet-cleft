@@ -28,10 +28,14 @@
 //#define DEBUGBITVECTOR 1
 // 1 to print the bit-vector every time
 // 2 to print on "blink"
-// 3 to print on shift-out
-//#define DEBUGLOGBITVECTOR 3
+// 3 to print limit-switch-bit-vector on shift-out
+// 4 to print all bit-vectors( step, dir, limit)
+#define DEBUGLOGBITVECTOR 4
 // print position of each motor on each step if true
 // If you see no steps, maybe you need the debug-jumper to fake limit switches?
+// 0 = no step output
+// 1 = step output on 100msec
+// 2 = step output every step
 #define DEBUGPOSPERSTEP 0
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
@@ -92,7 +96,7 @@ class AccelStepperNoted: public AccelStepper {
       // we just note that a step is requested
       (void)(astep); // Unused
 
-      if (DEBUGPOSPERSTEP) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
+      if (DEBUGPOSPERSTEP == 2) Serial << F("<P ") << motor_i << F(" ") << currentPosition() << endl;
       do_step = true;
     }
 
@@ -199,8 +203,9 @@ class AccelStepperShift : public BeginRun {
     static boolean constexpr DISABLE = !ENABLE;
 
     // depends on how far the CRASH_LIMIT steps actually is
-    static int constexpr CRASH_LIMIT = 200; // steps past limit switch, absolute limit
     static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
+    static float constexpr DISTANCE_LIMIT_TO_CRASH = 0.05; // meters
+    static int constexpr CRASH_LIMIT = STEPS_METER * DISTANCE_LIMIT_TO_CRASH ; // steps past limit switch, absolute limit
     static float constexpr MAX_MOTION = 0.1; // meters fixme: measure
     static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
 
@@ -216,7 +221,7 @@ class AccelStepperShift : public BeginRun {
     //  -> unused_frame[1]:unused_frame[0]... if any
     //  end-of-chain
     static constexpr int bits_per_frame = 2; // dir-,pul-, ("en" is common)
-    static constexpr int extra_frames = 8 / bits_per_frame; // the led-bar: 1 whole shift-register
+    static constexpr int extra_frames = NO_EXTRA_FRAMES ? 0 : 8 / bits_per_frame; // the led-bar: 1 whole shift-register
     // cf unused_frames. use frame_i = unused_frames as index of 1st "extra frame"
     static constexpr int used_bits = 2; // dir-,pul- (unused per frame is possible) ("en" is common)
     static constexpr byte frame_mask = (1 << bits_per_frame) - 1; // just the bits of the frame, i.e. n bits
@@ -241,7 +246,7 @@ class AccelStepperShift : public BeginRun {
 
     AccelStepperNoted** motors; // an [motor_ct] of them
     boolean all_done = false; // goes true when all motors finish their targets
-    
+
     // for blinking indicators, i.e. leaves led on for at least this time
     Timer recent_step = Timer(200, false);
     Timer recent_limit = Timer(200, false);
@@ -291,7 +296,16 @@ class AccelStepperShift : public BeginRun {
       enable();
 
       // construct now, so we can control when memory is allocated
-      Serial << F("BEGIN AccelStepperShift ") << motor_ct
+      Serial << F("BEGIN AccelStepperShift ") << endl;
+      Serial       << F(" enable_pin ") << enable_pin
+                   << F(" latch_pin ") << latch_pin
+                   << F(" LATCHSTART ") << LATCHSTART
+                   << F(" LATCHIDLE ") << LATCHIDLE
+                   << F(" shift_load_pin " ) << shift_load_pin
+                   << F(" SH_LD_IDLE ") << SH_LD_IDLE
+                   << F(" SH_LD_LOAD ") << SH_LD_LOAD
+                   << endl;
+      Serial << F(" Motors ") << motor_ct
              << F(" bit_vector bytes ") << byte_ct << F(" motor ct ") << motor_ct
              << F(" extra frames ") << extra_frames
              << F(" unused frames ") << unused_frames
@@ -376,6 +390,8 @@ class AccelStepperShift : public BeginRun {
       // use led-bar for various indications
       // true clears some bits
 
+      if (NO_EXTRA_FRAMES) return;
+
       static Every::Toggle spi_heartbeat(200); // "blink" one of the leds NB: class level!
 
       // shift register bits, we numbered the led from 9...0 in the comment
@@ -454,7 +470,7 @@ class AccelStepperShift : public BeginRun {
 
       if (DEBUGSTOPAFTER && step_count >= DEBUGSTOPAFTER) return false;
 
-      //Serial << F("run all, already all_done? ") << all_done << endl;
+      //Serial << F("run all, already all_done ? ") << all_done << endl;
 
       boolean done = true; // is everybody finished on this loop?
       for (int i = 0; i < motor_ct; i++) {
@@ -467,7 +483,7 @@ class AccelStepperShift : public BeginRun {
         // Which means we will not see run()==true for the last step. thus do_step() instead:
         if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
-          if (say && !DEBUGPOSPERSTEP) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
+          if (say && DEBUGPOSPERSTEP == 1) Serial << F(" < P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << F(" to ") << motors[i]->currentPosition() << endl; // message as each motor finishes
@@ -476,12 +492,12 @@ class AccelStepperShift : public BeginRun {
         //if ( motors[i]->currentPosition() != motors[i]->targetPosition() ) {
         //  Serial << F("expected move " ) << i << F(" to ") << motors[i]->targetPosition() << endl;
         //}
-        //Serial << F("  motors at i done? ") << i << F(" ") << done << endl;
+        //Serial << F("  motors at i done ? ") << i << F(" ") << done << endl;
 
 
         if (false && DEBUGBITVECTOR > 0 && DEBUGBITVECTOR <= i && !all_done) {
           Serial
-              << F("motor[") << i << F("] do_step? ") << motors[i]->do_step
+              << F("motor[") << i << F("] do_step ? ") << motors[i]->do_step
               << endl;
         }
 
@@ -524,7 +540,7 @@ class AccelStepperShift : public BeginRun {
         if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
           Serial << F("BV motor[") << i << F("] ")
                  << F(" extra ") << extra_frames << F(" unused ") << unused_frames << F(" = ") << (extra_frames + unused_frames)
-                 << F("| frame[") << frame_i << F("] ")
+                 << F(" | frame[") << frame_i << F("] ")
                  << F(" direction ") << motors[i]->direction()
                  << endl;
           Serial << F("  mask 0b") << _BIN(frame_mask) << endl;
@@ -536,7 +552,7 @@ class AccelStepperShift : public BeginRun {
 
         // This is instant stop.
         // Forces the step bit to never go high
-        const boolean allow_step = ! (
+        const boolean allow_step = ignore_limit_switches || ! (
                                      hit_limit_going_up
                                      && (motors[i]->currentPosition() - motors[i]->at_limit_pos) >= CRASH_LIMIT
                                    );
@@ -558,8 +574,8 @@ class AccelStepperShift : public BeginRun {
         set_frame( step_bit_vector, frame_i, frame_mask, step_bit );
 
         if (DEBUGBITVECTOR > 0 && DEBUGBITVECTOR >= i) {
-          Serial << F("  dir byte[") << byte_i << F("]= ") << _BIN(dir_bit_vector[ byte_i ]) << endl;
-          Serial << F("  step byte[") << byte_i << F("]= ") << _BIN(step_bit_vector[ byte_i ]) << endl;
+          Serial << F("  dir byte[") << byte_i << F("] = ") << _BIN(dir_bit_vector[ byte_i ]) << endl;
+          Serial << F("  step byte[") << byte_i << F("] = ") << _BIN(step_bit_vector[ byte_i ]) << endl;
         }
 
         // dump, then stop if debugging this motor
@@ -609,17 +625,15 @@ class AccelStepperShift : public BeginRun {
 
       byte dir_copy[byte_ct];
       unsigned long start = millis();
-      if (DEBUGLOGBITVECTOR == 3) Serial << F("shift out ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
+      if (DEBUGLOGBITVECTOR >= 4) Serial << F("shift out ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
 
       // SPI.transfer(byte []) overwrites the byte[] buffer,
       // and we need to preserve it
       // SO make a copy of bit_vectors
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
-      // out is the step_bit_vector, but we capture the input
-      memcpy( limit_switch_bit_vector, step_bit_vector, byte_ct * sizeof(byte));
 
-      // read input pins, allow shift-in (5ns? 1000ns? for low to read)
-      digitalWrite(shift_load_pin, SH_LD_LOAD); // we cound on digitalWrite being sloooow
+      // load input pins, allow shift-in (5ns? 1000ns? for low to read)
+      digitalWrite(shift_load_pin, SH_LD_LOAD); // we count on digitalWrite being sloooow
       digitalWrite(shift_load_pin, SH_LD_IDLE);
       delayMicroseconds(1); // probably not necessary
 
@@ -627,38 +641,45 @@ class AccelStepperShift : public BeginRun {
       // MSBFIRST affects read and write
       SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
 
-      // Each transfer reads the input shift-register too, but we capture on the 2nd one
+      // Each transfer reads the input shift-register too, but we capture on the 1st one
 
       // the driver wants the DIR bits to be set before a STEP pulse:
-      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
+      if (DEBUGLOGBITVECTOR >= 4) dump_bit_vector(dir_copy);
       SPI.transfer(dir_copy, byte_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
-      // STEP pulses to high (with same DIR)
-      // Out (limit_switch_bit_vector) is a copy of step_bit_vector
-      // Here's where we capture the limit-switches, back into limit_switch_bit_vector.
-      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(limit_switch_bit_vector);
-      SPI.transfer(limit_switch_bit_vector, byte_ct);
-      digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
-      if (DEBUGLOGBITVECTOR == 3) {
-        Serial << F("Limit:") << endl;
+      // save that 1st in/out data. because it is shifting-in noise off the end
+      // (cf. shift_load_pin as the latch above)
+      memcpy( limit_switch_bit_vector, dir_copy, byte_ct * sizeof(byte));
+      Serial << F("1st dir "); dump_bit_vector(dir_copy);
+      if (DEBUGLOGBITVECTOR >= 3) {
+        Serial << F("Limit : ");
         dump_bit_vector(limit_switch_bit_vector);
       }
+
+      // STEP pulses to high (with same DIR)
+      // The bit-vector is overwritten, but we don't care (we remake it each shift_out() )
+      // Here's where we capture the limit-switches, back into limit_switch_bit_vector.
+      SPI.transfer(step_bit_vector, byte_ct);
+      digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
+
       if (DEBUGSTUPIDSLOW) delay(DEBUGSTUPIDSLOW);
 
       // again, because the stop bit is always 0 in this bit-vector, i.e. finish the step pulse.
       memcpy( dir_copy, dir_bit_vector, byte_ct * sizeof(byte));
-      if (DEBUGLOGBITVECTOR == 3) dump_bit_vector(dir_copy);
       SPI.transfer(dir_copy, byte_ct); // this is "step pulse off"
+      // last latch is below...
 
       SPI.endTransaction(); // "as soon as possible"
       // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
 
+     delay(3000);
+
       if (DEBUGSTUPIDSLOW) {
-        Serial << F("--- ") << (millis() - start) << endl;
+        Serial << F("-- - ") << (millis() - start) << endl;
         delay(DEBUGSTUPIDSLOW);
       }
     }
@@ -680,7 +701,7 @@ class AccelStepperShift : public BeginRun {
       if (DEBUGFRAME > 0) {
         Serial << F("    set frame ") << frame_i << F(" = 0b") << _BIN(value) << F(" mask ") << _BIN(mask)
                << F(" byte[") << r_byte_i << F("]")
-               << F(" frameoffset ") << (frame_i % frames_per_byte ) << F(" <<offset ") << offset
+               << F(" frameoffset ") << (frame_i % frames_per_byte ) << F(" << offset ") << offset
                << F(" == mask 0b") << _BIN(mask << offset) << F(" = ") << _BIN(value << offset)
                << endl;
       }
@@ -692,30 +713,41 @@ class AccelStepperShift : public BeginRun {
       // get value of a limit switch
       // which was read by the spi-transfer
       // spi.transfer is MSBFIRST, and reads into byte[0] first
-      // so byte[0].bit[0] is actual shift-register[0].bit[7]
+      // So, shift_register #1 is byte[0]
+      // and it's input #1 is bit[0]
+      // so byte[0].bit[0] is actual shift-register[0].bit[0]
       // and we are using the "first" bit of the shift-register as the first switch
+      // NB: by the time you test via this fn, you are 1 step past where the limit was triggered
       const int byte_i = (motor_i * bits_per_frame ) / (sizeof(byte) * 8);
       const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
       const int offset = (motor_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=2, frame2=3, etc
       const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 ..
 
+      if (motor_i == 0) {
+        Serial << F("Limit ") << motor_i
+               << F(" byte_i ") << byte_i
+               << F(" bitoffset ") << offset
+               << F(" r_offset ") << r_offset
+               << F(" == " ) << ( limit_switch_bit_vector[ byte_i ] & (1 << offset) )
+               << endl;
+      }
       // open switch == pullup, so 0 is "limit hit"
-      return ! ( limit_switch_bit_vector[ byte_i ] & (1 << r_offset) );
+      return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
 
     void goto_limit() {
       // move all motors to the limit switch
       // skip this if no limit switches
       if (! digitalRead(fake_limit_pin)) return;
-      
+
       boolean doing_fake_limit = false; // fake all limit switch if jumper on FAKE_LIMIT_PIN
 
       Serial << F("Goto LIMITUP") << endl;
 
       constexpr float our_acceleration = 400.0f;
-      constexpr int distance_drop = - (CRASH_LIMIT + CRASH_LIMIT / 2);
+      constexpr int distance_drop = - (CRASH_LIMIT + CRASH_LIMIT / 2); // 1.5 * crash-limit
       static_assert(distance_drop < 2 * MAX_MOTION * STEPS_METER, "Drop before uplimit was > MAX_MOTION");
-      Timer too_long(1);
+      Timer too_long(1); // will be reset for each stage
 
       heartbeat( NEO_STATE_UPLIMIT );
 
@@ -731,10 +763,10 @@ class AccelStepperShift : public BeginRun {
         finish_loop(); // resets do_step() so we can detect all-done
       }
       if (too_long.after()) {
-        Serial << F("FAULT: too long to run ") << distance_drop << endl;
+        Serial << F("FAULT : too long to run ") << distance_drop << endl;
         fault();
       }
-      Serial << F("Drop below limit: done") << endl;
+      Serial << F("Drop below limit : done") << endl;
 
       if ( fake_limit_pin && ! digitalRead(fake_limit_pin) ) {
         doing_fake_limit = true;
@@ -755,24 +787,26 @@ class AccelStepperShift : public BeginRun {
         if (doing_fake_limit && fake_limit() ) break;
       }
       if (too_long.after()) {
-        Serial << F("FAULT: too long to run ") << distance_to_limit << endl;
+        Serial << F("FAULT : too long to run ") << distance_to_limit << endl;
         fault();
       }
-      Serial << F("All limits hit: done") << endl;
+      Serial << F("All limits hit : done") << endl;
 
       boolean hit_limit = true;
       for (int i = 0; i < motor_ct; i++) {
         hit_limit &= doing_fake_limit || motors[i]->at_limit;
       }
       if (!hit_limit) {
-        Serial << F("FAULT: didn't hit limit ") << distance_to_limit << endl;
+        Serial << F("FAULT : didn't hit limit ") << distance_to_limit << endl;
         fault();
       }
 
       // all motors at LIMITUP
       // reset to 0 and cleanup
-      constexpr int distance_to_zero = (10 + MAX_MOTION * STEPS_METER);
+      constexpr int distance_to_zero = (10 + MAX_MOTION * STEPS_METER); // a little buffer for overrun
       for (int i = 0; i < motor_ct; i++) {
+        // run-all calls stop-at_limit which captures at_limit
+        // but we need to know where we actually stopped moving at:
         long stopped_at = motors[i]->currentPosition(); // we may have gone past a bit
         motors[i]->setCurrentPosition( distance_to_zero + stopped_at - motors[i]->at_limit_pos );
         motors[i]->at_limit_pos = distance_to_zero; // nobody is relying on this going to 0

@@ -80,6 +80,10 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 }
 
 // up here so available to the #includes, which is ugly
+
+constexpr int MOTOR_CT = 15;
+constexpr boolean NO_EXTRA_FRAMES = false; // "true" turns off the led-indicator frame (extra shift-register).
+
 Adafruit_NeoPixel builtin_neo(1,  40, NEO_GRB + NEO_KHZ800);
 // indications for builtin neo
 const uint32_t NEO_STATE_SETUP = Adafruit_NeoPixel::Color(255, 255, 0); // Yellow
@@ -111,7 +115,6 @@ static boolean allow_random = true; // enable idle random animations
 #define DEBUGMOVETEST 0
 #endif
 
-constexpr int MOTOR_CT = 15;
 constexpr int LATCH_PIN = 12;
 constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
@@ -151,7 +154,8 @@ Animation* Animation::animations[] = {
     1, // frequency
     1 // cycles
   ),
-  NULL, NULL, NULL, NULL,
+  NULL, NULL, NULL,
+  new AnimationIntegrationTests(stepper_shift), // 7
   new AnimationMotorTests(stepper_shift), // 8
   new AnimationFast(stepper_shift), // 9
 };
@@ -220,7 +224,7 @@ void setup() {
 
   // FIXME? shouldn't I have currentanimation.begin() here?
 
-  if (stepper_shift) stepper_shift->goto_limit();
+  if (stepper_shift) stepper_shift->goto_limit(); // null-op if jumper is ignore-limits
   //Serial << F(" GOTO LIMIT IS OFF") << endl;
 
   if (DEBUGMOVETEST) {

@@ -106,11 +106,11 @@ void loop() {
   //shift_read();
   //shift_write();
   //spi_read();
-  //spi_read_write();
+  spi_read_write();
   
   //spi_leakage_test(); // clean shifting? use with jig
 
-  spi_wiring_test(); // use this one w/test-jig (spi)
+  //spi_wiring_test(); // use this one w/test-jig (spi)
 
   /*
     // runs 1 pin in a 500ms blink, to isolate signal lines
@@ -336,7 +336,7 @@ void spi_read_write() {
     if (SLOW) Serial << F("lsb ") << _BIN(bit_vector[ 0 ])
                        << F(" copy[") << COPY_0IN_TO_OUT_BYTE << F("] ") << _BIN(bit_vector[ COPY_0IN_TO_OUT_BYTE]) << endl;
 
-    SPI.beginTransaction(SPISettings(SLOW ? 1000 : 1000000, MSBFIRST, SPI_MODE0));
+    SPI.beginTransaction(SPISettings(SLOW ? 1000000 : 1000000, MSBFIRST, SPI_MODE0));
     // sends 0...[n-1] [n], no matter what MSB/LSB first is!
     // so, nearest shift-register is [n]
     // Also, reads-in to the bit_vector

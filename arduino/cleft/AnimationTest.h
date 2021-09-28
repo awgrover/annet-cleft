@@ -106,13 +106,12 @@ class AnimationMotorTests : public Animation {
 
       // Want to get up to speed, run for 1 second, then decl
       int accel = speed / time_to_accel; // accel to speed in 2 second
-      int distance_while_accelerating = accel / 2 * time_to_accel * time_to_accel;
-      int total_distance = 2 * distance_while_accelerating + speed;
 
       // initial target is the max-amplitude of each segment
       for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
+        all_motors->motors[i]->setCurrentPosition( 0 ); // just assume, no limit...
       }
       Serial << F("Speed ") << speed
              << F(" Accel ") << accel
@@ -125,6 +124,17 @@ class AnimationMotorTests : public Animation {
     }
 
     boolean run() {
+      static Every print_limit(300);
+      if ( print_limit() ) {
+        Serial << F("          ") << F("          ") << F("          ") << F("          ");
+        for (int i = 0; i < all_motors->motor_ct; i++) {
+          if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
+          Serial << all_motors->limit_switch(i) << F(" ");
+        }
+        Serial << F("    ");
+        all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
+        Serial << endl;
+      }
       switch (state) {
         case Restart:
           restart();
@@ -174,7 +184,7 @@ class AnimationMotorTests : public Animation {
     void stopping() {
       if (all_motors->all_done) {
         Serial << F("!") << endl;
-        state = Idle;
+        state = Starting;
         Serial << F("Speed ") << speed
                << F(" to ") << distance
                << endl;
@@ -244,13 +254,12 @@ class AnimationIntegrationTests : public Animation {
 
       // Want to get up to speed, run for 1 second, then decl
       int accel = speed / time_to_accel; // accel to speed in 2 second
-      int distance_while_accelerating = accel / 2 * time_to_accel * time_to_accel;
-      int total_distance = 2 * distance_while_accelerating + speed;
 
       // initial target is the max-amplitude of each segment
       for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
+        all_motors->motors[i]->setCurrentPosition( 0 ); // just assume, no limit...
       }
       Serial << F("Speed ") << speed
              << F(" Accel ") << accel
@@ -262,6 +271,18 @@ class AnimationIntegrationTests : public Animation {
     }
 
     boolean run() {
+      static Every print_limit(300);
+      if ( print_limit() ) {
+        Serial << F("          ") << F("          ") << F("          ") << F("          ");
+        for (int i = 0; i < all_motors->motor_ct; i++) {
+          if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
+          Serial << all_motors->limit_switch(i) << F(" ");
+        }
+        Serial << F("    ");
+        all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
+        Serial << endl;
+      }
+
       switch (state) {
         case Restart:
           restart();
@@ -298,14 +319,24 @@ class AnimationIntegrationTests : public Animation {
     void running() {
       // determine direction
       for (int i = 0; i < all_motors->motor_ct; i++) {
+
+        int direction =  all_motors->limit_switch(i) ? -1 : 1;
+        boolean accel_direction = all_motors->limit_switch(i) ? 0 : 1;
+
         // we don't call runspeed, so just keep moving the goalpost
         // (but not every loop)
-        if ( abs(all_motors->motors[i]->targetPosition() - all_motors->motors[i]->currentPosition() ) < 50 ) {
-          long direction =  all_motors->limit_switch(i) ? speed : -speed; // arbitrary, sometime in the future
-          all_motors->motors[i]->move( direction );
+        if ( accel_direction != all_motors->motors[i]->direction()
+             || ( abs(all_motors->motors[i]->targetPosition() - all_motors->motors[i]->currentPosition() ) ) < 50
+           ) {
+          all_motors->motors[i]->move( direction * speed );
+          Serial << F("Update ") << i << F(" dir ") << accel_direction << F(" to ") << (direction*speed) << endl;
+          Serial << F("    is ") << all_motors->motors[i]->currentPosition() 
+          << F(" dir ") <<  all_motors->motors[i]->direction() 
+          << F(" to ") << all_motors->motors[i]->targetPosition()
+          << endl;
         }
       }
-      Serial << F("-") << endl;
+      // Serial << F("-") << endl;
 
       // never leaves this state
     }
@@ -339,7 +370,7 @@ class AnimationIntegrationTests : public Animation {
           restart();
           break;
 
-        
+
         default:
           Serial << F("???") << endl;
           break;
