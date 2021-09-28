@@ -625,7 +625,7 @@ class AccelStepperShift : public BeginRun {
 
       byte dir_copy[byte_ct];
       unsigned long start = millis();
-      if (DEBUGLOGBITVECTOR >= 4) Serial << F("shift out ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
+      if (DEBUGLOGBITVECTOR >= 4) Serial << F("shift out slow? ") << DEBUGSTUPIDSLOW << F(" | ") << (DEBUGSTUPIDSLOW ? "T" : "F") << endl;
 
       // SPI.transfer(byte []) overwrites the byte[] buffer,
       // and we need to preserve it
@@ -644,7 +644,10 @@ class AccelStepperShift : public BeginRun {
       // Each transfer reads the input shift-register too, but we capture on the 1st one
 
       // the driver wants the DIR bits to be set before a STEP pulse:
-      if (DEBUGLOGBITVECTOR >= 4) dump_bit_vector(dir_copy);
+      if (DEBUGLOGBITVECTOR >= 4) {
+        Serial << F("1st dir ");
+        dump_bit_vector(dir_copy);
+      }
       SPI.transfer(dir_copy, byte_ct);
       // latch signal needs to be 100ns long, and digitalWrite takes 5micros! so ok.
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
@@ -653,10 +656,14 @@ class AccelStepperShift : public BeginRun {
       // save that 1st in/out data. because it is shifting-in noise off the end
       // (cf. shift_load_pin as the latch above)
       memcpy( limit_switch_bit_vector, dir_copy, byte_ct * sizeof(byte));
-      Serial << F("1st dir "); dump_bit_vector(dir_copy);
       if (DEBUGLOGBITVECTOR >= 3) {
         Serial << F("Limit : ");
         dump_bit_vector(limit_switch_bit_vector);
+      }
+      
+      if (DEBUGLOGBITVECTOR >= 3) {
+        Serial << F("step      ");
+        dump_bit_vector(step_bit_vector);
       }
 
       // STEP pulses to high (with same DIR)
@@ -676,7 +683,7 @@ class AccelStepperShift : public BeginRun {
       // last latch
       digitalWrite(latch_pin, LATCHSTART); digitalWrite(latch_pin, LATCHIDLE);
 
-     delay(3000);
+      //delay(3000);
 
       if (DEBUGSTUPIDSLOW) {
         Serial << F("-- - ") << (millis() - start) << endl;

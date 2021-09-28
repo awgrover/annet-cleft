@@ -154,7 +154,8 @@ Animation* Animation::animations[] = {
     1, // frequency
     1 // cycles
   ),
-  NULL, NULL, NULL,
+  NULL, NULL,
+  new AnimationSequenceTests(stepper_shift),
   new AnimationIntegrationTests(stepper_shift), // 7
   new AnimationMotorTests(stepper_shift), // 8
   new AnimationFast(stepper_shift), // 9

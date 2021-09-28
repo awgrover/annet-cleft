@@ -329,16 +329,167 @@ class AnimationIntegrationTests : public Animation {
              || ( abs(all_motors->motors[i]->targetPosition() - all_motors->motors[i]->currentPosition() ) ) < 50
            ) {
           all_motors->motors[i]->move( direction * speed );
-          Serial << F("Update ") << i << F(" dir ") << accel_direction << F(" to ") << (direction*speed) << endl;
-          Serial << F("    is ") << all_motors->motors[i]->currentPosition() 
-          << F(" dir ") <<  all_motors->motors[i]->direction() 
-          << F(" to ") << all_motors->motors[i]->targetPosition()
-          << endl;
+          /*
+            Serial << F("Update ") << i << F(" dir ") << accel_direction << F(" to ") << (direction*speed) << endl;
+            Serial << F("    is ") << all_motors->motors[i]->currentPosition()
+            << F(" dir ") <<  all_motors->motors[i]->direction()
+            << F(" to ") << all_motors->motors[i]->targetPosition()
+            << endl;
+          */
         }
       }
       // Serial << F("-") << endl;
 
       // never leaves this state
+    }
+
+    void stopping() {
+      // we never get here
+      Serial << F("!") << endl;
+    }
+
+    boolean commands(char command) {
+      boolean handled = false;
+      Serial << F("Try ") << command << endl;
+
+      switch (command) {
+        case '/': // help
+          Serial
+              << F("A  2x speed") << endl
+              << F("B  / 2 speed") << endl
+              << F("/  help")
+              << endl;
+          handled = true;
+          break;
+
+        case 'A' :
+          speed = speed * 2;
+          restart();
+          break;
+
+        case 'B' :
+          speed = speed / 2;
+          restart();
+          break;
+
+
+        default:
+          Serial << F("???") << endl;
+          break;
+      }
+
+      return handled;
+    }
+};
+
+class AnimationSequenceTests : public Animation {
+    // Runs motors in sequence, forward, then reverse
+    // Allows choosing each motor: M[0-9a-f] or All
+    // clockwise while limit is open, counter while closed
+    // Type '/' to get commands
+
+  public:
+    // for the  smaller motor at 0.5A, 400 is about max (no microstep)
+    int time_to_accel = 2; // secs
+    int speed = (200 * 8) / 3; // steps per sec: steps/rev * micro/step / secs
+    int which_motor = -1; // all
+    boolean which_direction = 0; // forward
+    int motor_i = 0; // current motor
+
+    AnimationSequenceTests(AccelStepperShift* all_motors)
+      : Animation(all_motors)
+    {
+    }
+
+    void restart() {
+      Serial << F("AS start ") << ((long) this) << endl;
+      allow_random = false; // disable idles while testing
+
+      // Want to get up to speed, run for 1 second, then decl
+      int accel = speed / time_to_accel; // accel to speed in 2 second
+
+      // initial target is the max-amplitude of each segment
+      for (int i = 0; i < all_motors->motor_ct; i++) {
+        all_motors->motors[i]->setMaxSpeed(speed);
+        all_motors->motors[i]->setAcceleration(accel);
+        all_motors->motors[i]->setCurrentPosition( 0 ); // just assume, no limit...
+      }
+      Serial << F("Speed ") << speed
+             << F(" Accel ") << accel
+             << endl;
+
+      which_direction = 0; // forward
+      motor_i = 0;
+
+      state = Running;
+    }
+
+    void begin() {
+    }
+
+    boolean run() {
+      static Every print_limit(300);
+      if ( print_limit() ) {
+        Serial << F("          ") << F("          ") << F("          ") << F("          ");
+        for (int i = 0; i < all_motors->motor_ct; i++) {
+          if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
+          Serial << all_motors->limit_switch(i) << F(" ");
+        }
+        Serial << F("    ");
+        all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
+        Serial << endl;
+      }
+
+      switch (state) {
+        case Restart:
+          restart();
+          break;
+
+        case Starting:
+          startup(); // set current motor
+          break;
+
+        case Running: // wait for it to finish, next motor & dir
+          running();
+          break;
+
+        case Stopping:
+          // not used
+          break;
+
+        case Idle:
+          break;
+
+        case Off:
+          // don't restart
+          break;
+      }
+      return false; // IFF working
+    }
+
+    void startup() {
+      int direction = which_direction ? 1 : -1 ;
+      all_motors->motors[motor_i]->move( direction * speed );
+      Serial << F("Motor ") << motor_i << F(" dir ") << which_direction << F(" for ") << speed;
+
+      state = Running;
+    }
+
+    void running() {
+      // wait for finish
+      if (! all_motors->all_done) return;
+      
+      if (which_motor != -1) {
+        // reverse when we finish last
+        if (motor_i == MOTOR_CT - 1) which_direction = ! which_direction; // reverse
+
+        motor_i = (motor_i + 1) % MOTOR_CT;
+      }
+      else {
+        which_direction = ! which_direction; // reverse
+      }
+
+      state = Starting;
     }
 
     void stopping() {
