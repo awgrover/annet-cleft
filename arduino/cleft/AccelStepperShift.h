@@ -30,13 +30,13 @@
 // 2 to print on "blink"
 // 3 to print limit-switch-bit-vector on shift-out
 // 4 to print all bit-vectors( step, dir, limit)
-#define DEBUGLOGBITVECTOR 4
+#define DEBUGLOGBITVECTOR 0
 // print position of each motor on each step if true
 // If you see no steps, maybe you need the debug-jumper to fake limit switches?
 // 0 = no step output
 // 1 = step output on 100msec
 // 2 = step output every step
-#define DEBUGPOSPERSTEP 0
+#define DEBUGPOSPERSTEP 1
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
@@ -451,7 +451,7 @@ class AccelStepperShift : public BeginRun {
           motors[motor_i]->at_limit_pos = motors[motor_i]->currentPosition();
         }
         // and keep stopping
-        Serial << F("LIMIT ") << motor_i << endl;
+        // Serial << F("LIMIT ") << motor_i << endl;
         motors[motor_i]->stop(); // at current accel
       }
     }
@@ -483,7 +483,7 @@ class AccelStepperShift : public BeginRun {
         // Which means we will not see run()==true for the last step. thus do_step() instead:
         if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
-          if (say && DEBUGPOSPERSTEP == 1) Serial << F(" < P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
+          if (say && DEBUGPOSPERSTEP == 1) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << F(" to ") << motors[i]->currentPosition() << endl; // message as each motor finishes

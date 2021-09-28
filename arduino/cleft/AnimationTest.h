@@ -273,6 +273,7 @@ class AnimationIntegrationTests : public Animation {
     boolean run() {
       static Every print_limit(300);
       if ( print_limit() ) {
+        /*
         Serial << F("          ") << F("          ") << F("          ") << F("          ");
         for (int i = 0; i < all_motors->motor_ct; i++) {
           if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
@@ -281,6 +282,7 @@ class AnimationIntegrationTests : public Animation {
         Serial << F("    ");
         all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
         Serial << endl;
+        */
       }
 
       switch (state) {
@@ -421,7 +423,7 @@ class AnimationSequenceTests : public Animation {
       which_direction = 0; // forward
       motor_i = 0;
 
-      state = Running;
+      state = Starting;
     }
 
     void begin() {
@@ -430,6 +432,7 @@ class AnimationSequenceTests : public Animation {
     boolean run() {
       static Every print_limit(300);
       if ( print_limit() ) {
+        /*
         Serial << F("          ") << F("          ") << F("          ") << F("          ");
         for (int i = 0; i < all_motors->motor_ct; i++) {
           if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
@@ -438,6 +441,7 @@ class AnimationSequenceTests : public Animation {
         Serial << F("    ");
         all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
         Serial << endl;
+        */
       }
 
       switch (state) {
@@ -470,7 +474,7 @@ class AnimationSequenceTests : public Animation {
     void startup() {
       int direction = which_direction ? 1 : -1 ;
       all_motors->motors[motor_i]->move( direction * speed );
-      Serial << F("Motor ") << motor_i << F(" dir ") << which_direction << F(" for ") << speed;
+      Serial << F("Motor ") << motor_i << F(" dir ") << which_direction << F(" for ") << speed << endl;
 
       state = Running;
     }
@@ -479,7 +483,7 @@ class AnimationSequenceTests : public Animation {
       // wait for finish
       if (! all_motors->all_done) return;
       
-      if (which_motor != -1) {
+      if (which_motor == -1) {
         // reverse when we finish last
         if (motor_i == MOTOR_CT - 1) which_direction = ! which_direction; // reverse
 
