@@ -204,7 +204,7 @@ void keyPressed() {
         arduino_port.write('?');
         arduino_tracking = true;
       } else {
-        println("Not connected to arduion");
+        println("Not connected to arduino");
       }
     } else if (key == '-') {
       arduino_tracking = false;
@@ -227,12 +227,16 @@ void keyPressed() {
         arduino_port = null;
         arduino_reopen = false;
       }
-    } else if (int(key) == 127) {
+    } else if (int(key) == 127) { // DEL
       cleft.reset();
-    } else if (int(key) == 43) {
+    } else if (int(key) == 43) { // down
       cleft.move(segment_i, -0.1);
-    } else if (int(key) == 45) {
+    } else if (int(key) == 45) { // up
       cleft.move(segment_i, 0.1);
+    } else if (key >= 'A' && key <= 'Z') {
+      println("Ard Command " + key);
+      if (arduino_port != null) arduino_port.write(char(int(key)));
+      return;
     } else {
       // detect the shift-numbers, convert to 1..n
       for (int i=0; i<shift_numbers.length; i++) {

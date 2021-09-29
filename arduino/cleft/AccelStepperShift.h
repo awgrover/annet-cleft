@@ -36,7 +36,7 @@
 // 0 = no step output
 // 1 = step output on 100msec
 // 2 = step output every step
-#define DEBUGPOSPERSTEP 1
+#define DEBUGPOSPERSTEP 0
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
@@ -203,10 +203,11 @@ class AccelStepperShift : public BeginRun {
     static boolean constexpr DISABLE = !ENABLE;
 
     // depends on how far the CRASH_LIMIT steps actually is
-    static float constexpr STEPS_METER = 7.2 * 200; // fixme: measure
+    static float constexpr STEPS_METER = (1.0 / 7.0) * 200 ; // as measured: (1m / 0.07 m/rev) * 200 steps/rev
     static float constexpr DISTANCE_LIMIT_TO_CRASH = 0.05; // meters
     static int constexpr CRASH_LIMIT = STEPS_METER * DISTANCE_LIMIT_TO_CRASH ; // steps past limit switch, absolute limit
-    static float constexpr MAX_MOTION = 0.1; // meters fixme: measure
+    static float constexpr MAX_MOTION = 0.15; // meters
+    static float constexpr OFFSET_LIMIT = 0.015; // meters, at highest point, how much further to limit switch
     static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
 
     // We are using 8 bit shift registers
@@ -810,7 +811,7 @@ class AccelStepperShift : public BeginRun {
 
       // all motors at LIMITUP
       // reset to 0 and cleanup
-      constexpr int distance_to_zero = (10 + MAX_MOTION * STEPS_METER); // a little buffer for overrun
+      constexpr int distance_to_zero = (OFFSET_LIMIT + MAX_MOTION * STEPS_METER); // a little buffer for overrun
       for (int i = 0; i < motor_ct; i++) {
         // run-all calls stop-at_limit which captures at_limit
         // but we need to know where we actually stopped moving at:

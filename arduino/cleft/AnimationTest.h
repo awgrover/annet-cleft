@@ -274,14 +274,14 @@ class AnimationIntegrationTests : public Animation {
       static Every print_limit(300);
       if ( print_limit() ) {
         /*
-        Serial << F("          ") << F("          ") << F("          ") << F("          ");
-        for (int i = 0; i < all_motors->motor_ct; i++) {
+          Serial << F("          ") << F("          ") << F("          ") << F("          ");
+          for (int i = 0; i < all_motors->motor_ct; i++) {
           if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
           Serial << all_motors->limit_switch(i) << F(" ");
-        }
-        Serial << F("    ");
-        all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
-        Serial << endl;
+          }
+          Serial << F("    ");
+          all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
+          Serial << endl;
         */
       }
 
@@ -421,7 +421,7 @@ class AnimationSequenceTests : public Animation {
              << endl;
 
       which_direction = 0; // forward
-      motor_i = 0;
+      motor_i = which_motor == -1 ? 0 : which_motor;
 
       state = Starting;
     }
@@ -433,14 +433,14 @@ class AnimationSequenceTests : public Animation {
       static Every print_limit(300);
       if ( print_limit() ) {
         /*
-        Serial << F("          ") << F("          ") << F("          ") << F("          ");
-        for (int i = 0; i < all_motors->motor_ct; i++) {
+          Serial << F("          ") << F("          ") << F("          ") << F("          ");
+          for (int i = 0; i < all_motors->motor_ct; i++) {
           if ( i != 0 && i % 4 == 0 ) Serial << F(" . ");
           Serial << all_motors->limit_switch(i) << F(" ");
-        }
-        Serial << F("    ");
-        all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
-        Serial << endl;
+          }
+          Serial << F("    ");
+          all_motors->dump_bit_vector( all_motors->limit_switch_bit_vector );
+          Serial << endl;
         */
       }
 
@@ -482,7 +482,7 @@ class AnimationSequenceTests : public Animation {
     void running() {
       // wait for finish
       if (! all_motors->all_done) return;
-      
+
       if (which_motor == -1) {
         // reverse when we finish last
         if (motor_i == MOTOR_CT - 1) which_direction = ! which_direction; // reverse
@@ -508,22 +508,40 @@ class AnimationSequenceTests : public Animation {
       switch (command) {
         case '/': // help
           Serial
-              << F("A  2x speed") << endl
-              << F("B  / 2 speed") << endl
+              << F("Mn  only motor n 0-9a-f") << endl
+              << F("A  all motors") << endl
               << F("/  help")
               << endl;
           handled = true;
           break;
 
         case 'A' :
-          speed = speed * 2;
+          which_motor = -1;
+          motor_i = 0;
+          Serial << F("Motor All") << endl;
           restart();
+          handled = true;
           break;
 
-        case 'B' :
-          speed = speed / 2;
-          restart();
-          break;
+        case 'M' :
+          {
+            Serial << F("A-O (0..15)? ");
+            while (Serial.available() <= 0) { delay(50); }
+            char c = Serial.read();
+            Serial << endl;
+            if (c >= 'A' && c <= 'O') {
+              which_motor = c - 'A';
+              motor_i = which_motor;
+              handled = true;
+            }
+            else {
+              Serial << F("Not A-O");
+              break;
+            }
+            Serial << F("Motor ") << which_motor << endl;
+            restart();
+            break;
+          }
 
 
         default:
