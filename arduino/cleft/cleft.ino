@@ -120,7 +120,7 @@ constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
 constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
 constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
-const int DISABLE_LIST[] = { 11, -1 }; // permanently not-use motors, end with -1
+const int DISABLE_LIST[] = { 10, -1 }; // permanently not-use motors, end with -1
 
 constexpr unsigned long ATTRACTOR_IDLE = 30UL * 1000UL; // pick an animation if we have been idle
 
