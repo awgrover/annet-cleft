@@ -239,6 +239,7 @@ class AccelStepperShift : public BeginRun {
     const int latch_pin;
     const int shift_load_pin; // for parallel-to-serial
     const int enable_pin; // common enable. AccelStepper has _enablePin but private, and enable/disable does too much
+    const int *disable_motor; // list of motors to not use, end with -1
     const int fake_limit_pin;
     const int fake_limit_pin_x;
     // derived
@@ -264,13 +265,23 @@ class AccelStepperShift : public BeginRun {
     byte* limit_switch_bit_vector = NULL; // read via limit_switch(i)
     boolean* usable_motor = NULL; // true if we should pay any attention to the motor at [i]
 
-    AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin, const int enable_pin, const int fake_limit_pin, const int fake_limit_pin_x)
+    AccelStepperShift(
+      const int motor_ct,
+      const int latch_pin,
+      const int shift_load_pin,
+      const int enable_pin,
+      const int disable_motor[], // list of motors to not use, end with -1
+      const int fake_limit_pin,
+      const int fake_limit_pin_x
+    )
       : motor_ct(motor_ct)
       , latch_pin(latch_pin)
       , shift_load_pin(shift_load_pin)
       , enable_pin(enable_pin)
+      , disable_motor(disable_motor)
       , fake_limit_pin(fake_limit_pin)
       , fake_limit_pin_x(fake_limit_pin_x)
+      
         // pre-calculating a bunch of stuff
       , total_used_bits( (motor_ct + extra_frames) * bits_per_frame)
         // we have to fill out the bits to make a whole frame, i.e. ceiling()
@@ -351,8 +362,13 @@ class AccelStepperShift : public BeginRun {
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
       limit_switch_bit_vector = new byte[byte_ct];
       memset(limit_switch_bit_vector, 0, sizeof(byte)*motor_ct);
+
+      // copy permanently disabled
       usable_motor = new boolean[motor_ct];
       memset(usable_motor, true, sizeof(boolean)*motor_ct);
+      for (const int *disable = disable_motor; *disable != -1; disable++ ) {
+        usable_motor[ *disable ] = false;
+      }
 
 
       // default speed/accel
@@ -751,7 +767,7 @@ class AccelStepperShift : public BeginRun {
         */
       }
       if (! usable_motor[motor_i] ) return false; // ignore limit if not usable
-      
+
       // open switch == pullup, so 0 is "limit hit"
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
@@ -824,9 +840,9 @@ class AccelStepperShift : public BeginRun {
         // fixme: maybe don't test/warn if doing_fake_limit
         Serial << F("WARNING : Limit not hit " ) << i << F(" after ") << distance_to_limit << endl;
       }
-      
+
       if (too_long.after()) {
-        Serial << F("WARNING : too long to run to limit (at least one not hit) ") << distance_to_limit << endl;        
+        Serial << F("WARNING : too long to run to limit (at least one not hit) ") << distance_to_limit << endl;
       }
       Serial << F("All limits hit : done") << endl;
 

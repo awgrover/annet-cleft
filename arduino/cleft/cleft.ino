@@ -120,15 +120,23 @@ constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
 constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
 constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
+const int DISABLE_LIST[] = { 11, -1 }; // permanently not-use motors, end with -1
 
-constexpr unsigned long ATTRACTOR_IDLE = 30UL*1000UL; // pick an animation if we have been idle
+constexpr unsigned long ATTRACTOR_IDLE = 30UL * 1000UL; // pick an animation if we have been idle
 
 // SYSTEMS
 // Things that setup, and run during loop. See begin_run.h.
 // We run them via systems[] (below)
 // We need to explicitly refer to a few, so need explicit names.
 // When testing/developing, you can set these to NULL to skip using them
-AccelStepperShift* stepper_shift = new AccelStepperShift(MOTOR_CT, LATCH_PIN, SH_LD_PIN, MOTOR_ENABLE_PIN, FAKE_LIMIT_PIN, FAKE_LIMIT_PIN_X);
+AccelStepperShift* stepper_shift = new AccelStepperShift(
+  MOTOR_CT,
+  LATCH_PIN,
+  SH_LD_PIN,
+  MOTOR_ENABLE_PIN,
+  DISABLE_LIST,
+  FAKE_LIMIT_PIN,
+  FAKE_LIMIT_PIN_X);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT); // later
 
 // this list is only for serial commands (see Commands), to pick an animation.
@@ -300,8 +308,8 @@ void loop() {
   // let a system clean up from the state of one loop
   // i.e. systems might check each other for a per-loop state
   // e.g. AccelStepperNote sets do_step if it wants a step this loop
-for (BeginRun* a_system : systems) {
-  if ( a_system ) { // skip NULLs
+  for (BeginRun* a_system : systems) {
+    if ( a_system ) { // skip NULLs
       a_system->finish_loop();
     }
   }
@@ -314,11 +322,11 @@ for (BeginRun* a_system : systems) {
   elapsed.average( elapsed_micros  );
 
   if ( say_status() && last_elapsed != elapsed.value() ) {
-      Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
-             << F(" animation ") << ( (long) Animation::current_animation)
-             << endl;
-      last_elapsed = elapsed.value();
-    }
+    Serial << F("Loop ") << elapsed.value() << " free " << freeMemory()
+           << F(" animation ") << ( (long) Animation::current_animation)
+           << endl;
+    last_elapsed = elapsed.value();
+  }
 }
 
 void heartbeat(const uint32_t color) {
