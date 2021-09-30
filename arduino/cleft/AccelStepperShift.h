@@ -203,7 +203,7 @@ class AccelStepperShift : public BeginRun {
     static boolean constexpr DISABLE = !ENABLE;
 
     static int constexpr MICROSTEPS = 8; // set on driver
-    
+
     // depends on how far the CRASH_LIMIT steps actually is
     static float constexpr STEPS_METER = (1.0 / 0.07 ) * 200 * MICROSTEPS ; // as measured: (1m / 0.07 m/rev) * 200 steps/rev
     static float constexpr DISTANCE_LIMIT_TO_CRASH = 0.05; // meters
@@ -262,6 +262,7 @@ class AccelStepperShift : public BeginRun {
     byte* dir_bit_vector = NULL; // dir & step=0 for each frame
     byte* step_bit_vector = NULL; // dir&step for each frame
     byte* limit_switch_bit_vector = NULL; // read via limit_switch(i)
+    boolean* usable_motor = NULL; // true if we should pay any attention to the motor at [i]
 
     AccelStepperShift(const int motor_ct, const int latch_pin, const int shift_load_pin, const int enable_pin, const int fake_limit_pin, const int fake_limit_pin_x)
       : motor_ct(motor_ct)
@@ -350,6 +351,9 @@ class AccelStepperShift : public BeginRun {
       memset(dir_bit_vector, 0, sizeof(byte)*motor_ct);
       limit_switch_bit_vector = new byte[byte_ct];
       memset(limit_switch_bit_vector, 0, sizeof(byte)*motor_ct);
+      usable_motor = new boolean[motor_ct];
+      memset(usable_motor, true, sizeof(boolean)*motor_ct);
+
 
       // default speed/accel
       for (int i = 0; i < motor_ct; i++) {
@@ -555,10 +559,13 @@ class AccelStepperShift : public BeginRun {
 
         // This is instant stop.
         // Forces the step bit to never go high
-        const boolean allow_step = ignore_limit_switches || ! (
-                                     hit_limit_going_up
-                                     && (motors[i]->currentPosition() - motors[i]->at_limit_pos) >= CRASH_LIMIT
-                                   );
+        const boolean allow_step = usable_motor[i] // marked as usable (cf. goto_limit)
+                                   && ( ignore_limit_switches // global debug flag, cf the jumper pin
+                                        || ! (
+                                          hit_limit_going_up // already at limit
+                                          && (motors[i]->currentPosition() - motors[i]->at_limit_pos) >= CRASH_LIMIT // and in working range
+                                        )
+                                      );
         if (! allow_step) Serial << F("CRASH motor ") << i << endl;
 
         // want the dir-bit, and step=0
@@ -743,6 +750,7 @@ class AccelStepperShift : public BeginRun {
                << endl;
         */
       }
+      if (! usable_motor[motor_i] ) return false; // ignore limit if not usable
       // open switch == pullup, so 0 is "limit hit"
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
@@ -792,37 +800,37 @@ class AccelStepperShift : public BeginRun {
       }
 
       // move up till limit switch
-      constexpr int distance_to_limit = 3 * MAX_MOTION * STEPS_METER;
+      constexpr int distance_to_limit = 3 * MAX_MOTION * STEPS_METER; // long way to allow for reverse wrap
       Serial << F("up to limit ") << distance_to_limit << endl;
 
       for (int i = 0; i < motor_ct; i++) {
-        motors[i]->move( distance_to_limit ); // 24 revs should be about 2 meters
+        motors[i]->move( distance_to_limit );
       }
       too_long.reset( int( motors[0]->time_to( distance_to_limit, our_acceleration) * 1.5) ); // 2.5 secs / rev
       Timer fake_limit( int( motors[0]->time_to( distance_to_limit, our_acceleration) ) );
+      // uses limit_switch() to inhibit further motion (effectively sets move(0))
       while (run() && ! too_long()) {
         heartbeat( NEO_STATE_UPLIMIT );
         finish_loop(); // resets do_step() so we can detect all-done
 
         if (doing_fake_limit && fake_limit() ) break;
       }
+
+      // most motors should have recorded `at_limit`
+      // those that didn't should be marked as not-usable
+      for (int i = 0; i < motor_ct; i++) {
+        if ( ! motors[i]->at_limit ) usable_motor[i] = false;
+        // fixme: maybe don't test/warn if doing_fake_limit
+        Serial << F("WARNING : Limit not hit " ) << i << F(" after ") << distance_to_limit << endl;
+      }
+      
       if (too_long.after()) {
-        Serial << F("FAULT : too long to run ") << distance_to_limit << endl;
-        fault();
+        Serial << F("WARNING : too long to run to limit (at least one not hit) ") << distance_to_limit << endl;        
       }
       Serial << F("All limits hit : done") << endl;
 
-      boolean hit_limit = true;
-      for (int i = 0; i < motor_ct; i++) {
-        hit_limit &= doing_fake_limit || motors[i]->at_limit;
-      }
-      if (!hit_limit) {
-        Serial << F("FAULT : didn't hit limit ") << distance_to_limit << endl;
-        fault();
-      }
-
       // all motors at LIMITUP
-      // reset to 0 and cleanup
+      // calculate 0 and got there
       constexpr int distance_to_zero = (OFFSET_LIMIT + MAX_MOTION * STEPS_METER); // a little buffer for overrun
       for (int i = 0; i < motor_ct; i++) {
         // run-all calls stop-at_limit which captures at_limit
@@ -848,7 +856,9 @@ class AccelStepperShift : public BeginRun {
       //disable();
       builtin_neo.setPixelColor(0, NEO_STATE_FAULT );
       builtin_neo.show();
-      while (1) { delay(100); }; // and lock up
+      while (1) {
+        delay(100);
+      }; // and lock up
     }
 };
 
