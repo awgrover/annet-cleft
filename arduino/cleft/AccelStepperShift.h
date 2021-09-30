@@ -202,13 +202,15 @@ class AccelStepperShift : public BeginRun {
     static boolean constexpr ENABLE = HIGH;
     static boolean constexpr DISABLE = !ENABLE;
 
+    static int constexpr MICROSTEPS = 8; // set on driver
+    
     // depends on how far the CRASH_LIMIT steps actually is
-    static float constexpr STEPS_METER = (1.0 / 7.0) * 200 ; // as measured: (1m / 0.07 m/rev) * 200 steps/rev
+    static float constexpr STEPS_METER = (1.0 / 0.07 ) * 200 * MICROSTEPS ; // as measured: (1m / 0.07 m/rev) * 200 steps/rev
     static float constexpr DISTANCE_LIMIT_TO_CRASH = 0.05; // meters
     static int constexpr CRASH_LIMIT = STEPS_METER * DISTANCE_LIMIT_TO_CRASH ; // steps past limit switch, absolute limit
     static float constexpr MAX_MOTION = 0.15; // meters
     static float constexpr OFFSET_LIMIT = 0.015; // meters, at highest point, how much further to limit switch
-    static int constexpr MAX_SPEED = 200; // 1/rev sec, ...
+    static int constexpr MAX_SPEED = 200 * MICROSTEPS; // 1/rev sec, ...
 
     // We are using 8 bit shift registers
     // And 2 bits per motor (a "frame"): dir & step
@@ -661,7 +663,7 @@ class AccelStepperShift : public BeginRun {
         Serial << F("Limit : ");
         dump_bit_vector(limit_switch_bit_vector);
       }
-      
+
       if (DEBUGLOGBITVECTOR >= 3) {
         Serial << F("step      ");
         dump_bit_vector(step_bit_vector);
@@ -732,12 +734,14 @@ class AccelStepperShift : public BeginRun {
       const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 ..
 
       if (motor_i == 0) {
-        Serial << F("Limit ") << motor_i
+        /*
+          Serial << F("Limit ") << motor_i
                << F(" byte_i ") << byte_i
                << F(" bitoffset ") << offset
                << F(" r_offset ") << r_offset
                << F(" == " ) << ( limit_switch_bit_vector[ byte_i ] & (1 << offset) )
                << endl;
+        */
       }
       // open switch == pullup, so 0 is "limit hit"
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
@@ -750,12 +754,18 @@ class AccelStepperShift : public BeginRun {
 
       boolean doing_fake_limit = false; // fake all limit switch if jumper on FAKE_LIMIT_PIN
 
-      Serial << F("Goto LIMITUP") << endl;
+      Serial << F("Goto LIMITUP ")
+             << F(" steps/meter ") << STEPS_METER
+             << F(" max-motion ") << MAX_MOTION << F("(") << (MAX_MOTION * STEPS_METER) << F(")")
+             << F(" crash-limit ") << CRASH_LIMIT
+             << endl;
 
       constexpr float our_acceleration = 400.0f;
       constexpr int distance_drop = - (CRASH_LIMIT + CRASH_LIMIT / 2); // 1.5 * crash-limit
       static_assert(distance_drop < 2 * MAX_MOTION * STEPS_METER, "Drop before uplimit was > MAX_MOTION");
       Timer too_long(1); // will be reset for each stage
+
+      Serial << F("drop ") << distance_drop << endl;
 
       heartbeat( NEO_STATE_UPLIMIT );
 
@@ -782,7 +792,9 @@ class AccelStepperShift : public BeginRun {
       }
 
       // move up till limit switch
-      constexpr int distance_to_limit = 2 * MAX_MOTION * STEPS_METER;
+      constexpr int distance_to_limit = 3 * MAX_MOTION * STEPS_METER;
+      Serial << F("up to limit ") << distance_to_limit << endl;
+
       for (int i = 0; i < motor_ct; i++) {
         motors[i]->move( distance_to_limit ); // 24 revs should be about 2 meters
       }
@@ -833,10 +845,10 @@ class AccelStepperShift : public BeginRun {
     }
 
     void fault() {
-      disable();
+      //disable();
       builtin_neo.setPixelColor(0, NEO_STATE_FAULT );
       builtin_neo.show();
-      while (1); // and lock up
+      while (1) { delay(100); }; // and lock up
     }
 };
 
