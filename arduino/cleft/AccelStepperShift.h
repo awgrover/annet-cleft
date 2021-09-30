@@ -751,6 +751,7 @@ class AccelStepperShift : public BeginRun {
         */
       }
       if (! usable_motor[motor_i] ) return false; // ignore limit if not usable
+      
       // open switch == pullup, so 0 is "limit hit"
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
