@@ -137,21 +137,21 @@ Animation* Animation::animations[] = {
     stepper_shift,
     0.15, // amplitude meters
     0.5, // wavelength fraction that fits in 1/2 of cleft
-    0.25, // frequency
+    0.2, // frequency
     1 // cycles
   ),
   new AnimationWave2( // the failed cute wave "@"
     stepper_shift,
     5, // segments
     0.25, // max amplitude
-    1, // frequency
+    0.2, // frequency
     1 // cycles
   ),
   new AnimationWaveCute( // the cute wave "#"
     stepper_shift,
     5, // segments
     0.25, // max amplitude
-    1, // frequency
+    0.2, // frequency
     1 // cycles
   ),
   NULL, NULL,

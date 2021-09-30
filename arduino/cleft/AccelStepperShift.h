@@ -210,7 +210,7 @@ class AccelStepperShift : public BeginRun {
     static int constexpr CRASH_LIMIT = STEPS_METER * DISTANCE_LIMIT_TO_CRASH ; // steps past limit switch, absolute limit
     static float constexpr MAX_MOTION = 0.15; // meters
     static float constexpr OFFSET_LIMIT = 0.015; // meters, at highest point, how much further to limit switch
-    static int constexpr MAX_SPEED = 200 * MICROSTEPS; // 1/rev sec, ...
+    static int constexpr MAX_SPEED = (200 * 0.25) * MICROSTEPS; // 1/4 rev/sec, ...
 
     // We are using 8 bit shift registers
     // And 2 bits per motor (a "frame"): dir & step
@@ -738,7 +738,7 @@ class AccelStepperShift : public BeginRun {
       const int byte_i = (motor_i * bits_per_frame ) / (sizeof(byte) * 8);
       const int frames_per_byte = (sizeof(byte) * 8) / bits_per_frame; // better be multiple!
       const int offset = (motor_i % frames_per_byte ) * bits_per_frame; // frame0=0, frame1=2, frame2=3, etc
-      const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 ..
+      // const int r_offset = (sizeof(byte) * 8 - 1) - offset; // frame0=4, 3, 2 .. // was for bit order being reversed
 
       if (motor_i == 0) {
         /*
