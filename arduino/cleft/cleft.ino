@@ -81,7 +81,7 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 
 // up here so available to the #includes, which is ugly
 
-constexpr int MOTOR_CT = 4; // 15;
+constexpr int MOTOR_CT = 15; // during startup, will auto detect and ignore motors whose limit is not triggered
 constexpr boolean NO_EXTRA_FRAMES = false; // "true" turns off the led-indicator frame (extra shift-register).
 
 Adafruit_NeoPixel builtin_neo(1,  40, NEO_GRB + NEO_KHZ800);
