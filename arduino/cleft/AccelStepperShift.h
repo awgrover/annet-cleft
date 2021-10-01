@@ -370,7 +370,6 @@ class AccelStepperShift : public BeginRun {
         usable_motor[ *disable ] = false;
       }
 
-
       // default speed/accel
       for (int i = 0; i < motor_ct; i++) {
         // to 200 steps/sec in 0.1 sec
@@ -772,7 +771,7 @@ class AccelStepperShift : public BeginRun {
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
 
-    void goto_limit() {
+    void goto_limit(boolean drop_down_first=true) {
       // move all motors to the limit switch
       // skip this if no limit switches
       if (! digitalRead(fake_limit_pin)) return;

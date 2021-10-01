@@ -37,6 +37,12 @@ class Commands : public BeginRun {
               Serial << F("<P ") << i << F(" ") << all_motors->motors[i]->currentPosition() << endl;
             }
             break;
+            
+          case 'z': // goto_limit, does not reset usable_motor
+            Serial << F("Goto Limt") << endl;
+            Animation::current_animation->state = Animation::Off;
+            all_motors->goto_limit();
+          break;
 
           case '0': // stop animation, goto 0
             Serial << F("Homing") << endl;
@@ -82,7 +88,7 @@ class Commands : public BeginRun {
             if (command >= '1' && command <= '9') {
               // run an animation
               allow_random = true;
-              
+
               int animation_i = command - '1';
               Serial << F("restart animation ") << (animation_i + 1 ) << endl;
               if (animation_i < Animation::animation_ct && Animation::animations[animation_i] ) {

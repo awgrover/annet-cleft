@@ -29,7 +29,7 @@ class Animation : public BeginRun {
 
     Animation(AccelStepperShift* all_motors) : all_motors(all_motors) {}
 
-    boolean is_runnning() {
+    boolean is_running() {
      return ! ( state == Idle || state == Off);
     }
     

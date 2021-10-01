@@ -173,7 +173,7 @@ class AnimationWave1  : public Animation {
       for (int i = 0; i < half_segments; i++) {
         //if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
         if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
-          return;
+          break;
         }
       }
 
@@ -326,7 +326,7 @@ class AnimationWave2  : public Animation {
       // because we are pre-change...
       static Every say_pos(100);
       for (int i = 0; i < segments; i++) {
-        if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
+        //if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
         if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
           return;
         }
@@ -492,7 +492,7 @@ class AnimationWaveCute  : public Animation {
       // because we are pre-change...
       static Every say_pos(100);
       for (int i = 0; i < segments; i++) {
-        if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
+        //if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
         if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
           return;
         }

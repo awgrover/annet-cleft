@@ -120,7 +120,8 @@ constexpr int SH_LD_PIN = 11; // allow shift while high, load on low
 constexpr int MOTOR_ENABLE_PIN = 10; // common stepper-driver enable
 constexpr int FAKE_LIMIT_PIN = A5; // pull-up, so a jumper to A4 is "closed"
 constexpr int FAKE_LIMIT_PIN_X = A4; // set to LOW, so a jumper is the "switch"
-const int DISABLE_LIST[] = { 10, -1 }; // permanently not-use motors, end with -1
+
+const int DISABLE_LIST[] = { -1}; /// { 5,6,9,11,0, -1 }; // 0..14, permanently not-use motors, end with -1
 
 constexpr unsigned long ATTRACTOR_IDLE = 30UL * 1000UL; // pick an animation if we have been idle
 
@@ -143,22 +144,22 @@ AccelStepperShift* stepper_shift = new AccelStepperShift(
 Animation* Animation::animations[] = {
   new AnimationWave1( // moving sine wave '!'
     stepper_shift,
-    0.15, // amplitude meters
-    0.5, // wavelength fraction that fits in 1/2 of cleft
-    0.2, // frequency
+    AccelStepperShift::MAX_MOTION / 2, // amplitude meters
+    0.8, // wavelength fraction that fits in 1/2 of cleft
+    0.1, // frequency
     1 // cycles
   ),
   new AnimationWave2( // the failed cute wave "@"
     stepper_shift,
     5, // segments
-    0.25, // max amplitude
-    0.2, // frequency
+    AccelStepperShift::MAX_MOTION / 2, // max amplitude
+    0.08, // frequency
     1 // cycles
   ),
   new AnimationWaveCute( // the cute wave "#"
     stepper_shift,
     5, // segments
-    0.25, // max amplitude
+    (AccelStepperShift::MAX_MOTION  / 2 ), // max amplitude
     0.2, // frequency
     1 // cycles
   ),
@@ -277,6 +278,13 @@ void loop() {
   static unsigned long last_elapsed = 0;
   const unsigned long last_micros = micros(); // top of loop
 
+  static Every debug(1000);
+  if (debug()) {
+    Serial << F("allow r? ") << allow_random
+           << F(" is running? ") << Animation::current_animation->is_running()
+           << endl;
+  }
+
   heartbeat(NEO_STATE_LOOPING);
 
   // Run each object/module/system
@@ -291,11 +299,11 @@ void loop() {
 
   // idle animation
   // wait some duration after !is_running (Timer)
-  if ( Animation::current_animation->is_runnning() ) {
+  if ( Animation::current_animation->is_running() ) {
     start_idle.reset();
   }
   else if (allow_random && start_idle()) {
-    int allowed[] = { 0, 2 }; // big wave & cute wave
+    const static int allowed[] = { 0, 2 }; // big wave & cute wave
     int which = allowed[ random( array_size( allowed ) ) ];
 
     Animation::current_animation = Animation::animations[which];
