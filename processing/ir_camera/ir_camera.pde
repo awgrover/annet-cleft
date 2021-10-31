@@ -30,6 +30,7 @@ boolean arduino_reopen = true; // false to stop trying
 final char[] shift_numbers = {'!', '@', '#', '$', '%', '^', '&', '*', '(', ')'};
 
 Every check_arduino_port = new Every(500);
+Every say_range = new Every(1000);
 
 static int segment_i; // selected segment to operate on
 
@@ -260,7 +261,7 @@ boolean one_row(int row_i, String line) {
   return true;
 }
 
-void draw_pixels() {
+void draw_pixels() {  
   float min_t =max_temp, max_t =min_temp;
 
   for (int y=0; y<temp_rows; y++) {
@@ -274,7 +275,7 @@ void draw_pixels() {
    min_t = min(min_t, 16.0);
    max_t = max(max_t, 30.0);
    } */
-  println("range " + min_t + " " + max_t + " color? " +pixel_is_color);
+  if (say_range.now()) println("range " + min_t + " " + max_t + " color? " +pixel_is_color);
 
   int box_width = width / temp_cols;
   int box_height = height / temp_rows;
@@ -282,8 +283,6 @@ void draw_pixels() {
     int y_top_left = box_height * y;
     for (int x=0; x<temp_cols; x++) {
       int x_top_left = box_width * x;
-
-
 
       if (pixel_is_color) {
         // using adafruit gfx colors:
@@ -293,7 +292,7 @@ void draw_pixels() {
         int red = (int) Math.pow(2,(8-5)) * ( (gfx_color >> 5+6) & 0x1f );
         int green = (int) Math.pow(2,(8-6)) * ( (gfx_color >> 6) & 0x3f);
         int blue = (int) Math.pow(2,(8-5)) * ( (gfx_color >> 0) & 0x1f);
-        if (y==12 && x == 12) println("C "+gfx_color+" -> "+red," ",blue," ",green);
+        //if (y==12 && x == 12) println("C "+gfx_color+" -> "+red," ",blue," ",green);
         
         fill(red, green, blue);
         stroke(red, green, blue );
