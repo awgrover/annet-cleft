@@ -2,8 +2,8 @@
   modified to work with my processing/ir_camera visualizer.
 
   Tried the adafruit i2c extender (https://www.adafruit.com/product/4756 (LTC4311 based):
-  * did not work: M0 -> extender -> 11' pots wire -> ir cam
-  * did work: M0 -> extender -> 11' pots wire -> muz -> 3" stemma/qwic -> ir cam
+    did not work: M0 -> extender -> 11' pots wire -> ir cam
+    did work: M0 -> extender -> 11' pots wire -> muz -> 3" stemma/qwic -> ir cam
 */
 /***************************************************************************
   This is a library for the AMG88xx GridEYE 8x8 IR camera
@@ -30,9 +30,12 @@
 #include <Adafruit_AMG88xx.h>
 #include <Every.h>
 #include <ExponentialSmooth.h>
+#include "freememory.h"
 #include <Streaming.h>
 #include <SparkFun_I2C_Mux_Arduino_Library.h> //Click here to get the library: http://librarymanager/All#SparkFun_I2C_Mux
 QWIICMUX myMux;
+
+#include "CollectStats.h"
 
 //Comment this out to remove the text overlay
 //#define SHOW_TEMP_TEXT
@@ -92,22 +95,40 @@ float cubicInterpolate(float p[], float x);
 float bicubicInterpolate(float p[], float x, float y);
 void interpolate_image(float *src, uint8_t src_rows, uint8_t src_cols,
                        float *dest, uint8_t dest_rows, uint8_t dest_cols);
+
+boolean draw_raw_data = false; // start in interpolate mode
+int JumperGnd = A5;
+int JumperRead = A4;
+
+#define MUX -1 // which port or -1 for don't use
+
 void setup() {
   while (!Serial) delay(100);
   Serial.begin(115200);
+  //Serial << F("Free " ) << freeMemory() << endl;
+  
   Serial.println("\n\nAMG88xx Interpolated Thermal Camera...");
 
   //Wire.setClock(100000);
 
-  if (myMux.begin()) {
-    Serial.println("Mux detected");
-    myMux.setPort(1); //Connect master to port labeled '1' on the mux
-    Serial << F("Using port 1 on mux") << endl;
-    byte currentPortNumber = myMux.getPort();
-    Serial.print("CurrentPort: ");
-    Serial.println(currentPortNumber);
+  if (MUX != -1) {
+    Wire.begin();
+    if (myMux.begin()) {
 
+      Serial.println("Mux detected");
+      myMux.setPort(MUX); //Connect master to port labeled '1' on the mux
+      Serial << F("  Using port 1 on mux") << endl;
+      byte currentPortNumber = myMux.getPort();
+      Serial.print("  CurrentPort: ");
+      Serial.println(currentPortNumber);
+
+    }
+    else {
+      Serial << F("No MUX") << endl;
+      while (1) delay(100);
+    }
   }
+  
   // default settings
   if (!amg.begin()) {
     Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
@@ -116,8 +137,15 @@ void setup() {
     }
   }
 
+
+  // 2 pins next to each other for jumper detect
+  pinMode( JumperGnd, OUTPUT);
+  digitalWrite( JumperGnd, LOW);
+  pinMode( JumperRead, INPUT_PULLUP);
+
   Serial.println("-- Thermal Camera Test --");
-  delay(1000);
+  delay(10);
+  Serial.println("go");
 }
 
 void loop() {
@@ -126,31 +154,98 @@ void loop() {
   static Every ir_framerate(100);
   static ExponentialSmooth<unsigned long> cam_rate = ExponentialSmooth<unsigned long>(5);
   static unsigned long last_loop = millis();
-  static Every say_rate(1000);
+  static Every say_rate(1000, true);
+  unsigned long start = millis();
 
-  if (say_size()) {
-    Serial << "xy[" << INTERPOLATED_COLS << ", " << INTERPOLATED_ROWS << " ]" << endl;
-  }
+  check_for_command();
 
   if (ir_framerate()) {
+    //Serial << F("Free " ) << freeMemory() << endl;
+    //Serial << F("Read...");
     // time it
     last_loop = millis();
 
     //read all the pixels
     amg.readPixels(pixels);
+    //Serial << F("...read") << endl;
 
-    static float dest_2d[INTERPOLATED_ROWS * INTERPOLATED_COLS];
+    if (draw_raw_data) {
+      //Serial << F("raw...") << endl;
+      if (say_size()) {
+        Serial << "xy[" << AMG_COLS << ", " << AMG_ROWS << " ]" << endl;
+      }
+      //Serial << F("draw...") << endl;
+      draw_pixels(pixels, AMG_COLS, AMG_ROWS);
+    }
+    else {
+      //Serial << F("interp...") << endl;
+      if (say_size()) {
+        Serial << "xy[" << INTERPOLATED_COLS << ", " << INTERPOLATED_ROWS << " ]" << endl;
+      }
 
-    int32_t t = millis();
-    interpolate_image(pixels, AMG_ROWS, AMG_COLS, dest_2d, INTERPOLATED_ROWS, INTERPOLATED_COLS);
-    Serial.print("Interpolation took "); Serial.print(millis() - t); Serial.println(" ms");
+      static float dest_2d[INTERPOLATED_ROWS * INTERPOLATED_COLS];
 
-    drawpixels(dest_2d, INTERPOLATED_ROWS, INTERPOLATED_COLS);
+      int32_t t = millis();
+      interpolate_image(pixels, AMG_ROWS, AMG_COLS, dest_2d, INTERPOLATED_ROWS, INTERPOLATED_COLS);
+      Serial.print("Interpolation took "); Serial.print(millis() - t); Serial.println(" ms");
 
+      draw_interpolation_pixels(dest_2d, INTERPOLATED_ROWS, INTERPOLATED_COLS);
+    }
+
+  }
+  if (say_rate()) Serial << F("loop ") << (millis() - start) << endl;
+}
+
+void check_for_command() {
+  static Every jumper_check(500, true);
+  if (jumper_check()) {
+    draw_raw_data = ! digitalRead(JumperRead);
+  }
+
+  if (Serial.available() > 0) {
+    Serial << F("ser read...");
+    char cmd = Serial.read();
+    Serial << F("...read") << endl;
   }
 }
 
-void drawpixels(float *p, uint8_t rows, uint8_t cols) {
+void draw_pixels(float * p, uint8_t rows, uint8_t cols) {
+  // raw data as ints (not color)
+  static CollectStats collect_stats;
+  static Every say_stats(1000);
+  static Every slow(1000);
+  //Serial << F("Free " ) << freeMemory() << endl;
+  //Serial << F("in draw..") << endl;
+  
+  if (slow()) {
+    float last_min = collect_stats.min_v;
+    float last_max = collect_stats.max_v;
+    //Serial << F("slow...") << endl;
+    
+    collect_stats.reset();
+
+    Serial.print("[");
+    for (int y = 0; y < rows; y++) {
+      for (int x = cols - 1; x >= 0; x--) { // 0..cols will give mirrored left/right effect
+        float temp = pixels[ x  + y * rows ] ;
+        collect_stats.value( temp );
+        if (temp <= last_max - 1) temp = 0;
+        Serial << temp;
+        Serial.print(", ");
+      }
+      Serial.println();
+
+    }
+    Serial << "]" << endl;
+  }
+
+  if (say_stats()) {
+    Serial << F("minmax[") << collect_stats.min_v << F(",") << collect_stats.max_v << F("]") << endl;
+    collect_stats.print_histo();
+  }
+}
+
+void draw_interpolation_pixels(float * p, uint8_t rows, uint8_t cols) {
   int colorTemp;
 
   Serial.print("C[");

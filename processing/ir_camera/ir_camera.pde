@@ -1,9 +1,26 @@
 /*
 Visualizing the ir-camera
  1. use the Adafruit_AMG88xx examples/pixels_test
- */
+ 
+ To connect to the remote-pi (which is connected to the arduino):
+ * remote-pi should be trying wifi for awgdart
+ * laptop should be hotspot
+ * check with ssh cleftpi.local
+ * make pipe:
+ mkfifo -m 0600 $THISDIR/remote-serial
+ ssh cleftpi.local bin/cat-arduino > $THISDIR/remote-serial
+*/
 
 import java.util.StringTokenizer;
+
+// Drawing areas
+final int tv_width = 900;
+final int tv_height = tv_width;
+final int histo_x0 = tv_width + 1;
+final int histo_width = 400;
+final int histo_height = 200;
+final int total_width = tv_width + Math.max(0, histo_width);
+final int total_height =  Math.max(tv_width, histo_height);
 
 float min_temp = 0; // celsius
 float max_temp = 80;
@@ -16,6 +33,9 @@ float temperatures[][] = null;
 int temp_cols = 0;
 int temp_rows = 0;
 boolean pixel_is_color = false; // false==temperature values
+
+int histo[] = null;
+boolean new_histo = false;
 
 boolean mouse_down = false;
 PVector mouse_start = new PVector();
@@ -35,7 +55,7 @@ Every say_range = new Every(1000);
 static int segment_i; // selected segment to operate on
 
 void setup() {
-  size(900, 900); // 1200, 924);
+  size(1200, 900);
   background(0);
 
   GlobalProcessing.P = this;
@@ -77,6 +97,11 @@ void draw() {
     draw_pixels();
     new_data = false;
   }
+
+  if ( new_histo ) {
+    draw_histo(); 
+    new_histo = false;
+  }
   /*background(90);
    
    fill(0, 0, 255);
@@ -101,16 +126,39 @@ void draw() {
   fill(255);
 }
 
+void draw_histo() {
+  int histo_max = 0;
+  for (int i = 0; i < histo.length; i++) {
+    if (histo_max < histo[i]) histo_max = histo[i];
+  }
+
+  float pixel_per_height = histo_height / histo_max;
+  int bar_width = histo_width / histo.length; // pix per bar
+
+  fill(255);
+
+  for (int i = 0; i < histo.length; i++) {
+    int bar_height = Math.round(pixel_per_height * histo[i]) ;
+    rect(
+      histo_x0 + i * bar_width, histo_height, 
+      bar_width, -bar_height 
+      );
+    //println("histo " + i + "=" + histo[i]);
+    //println("   x " + (histo_x0 + i * bar_width));
+  }
+  println("histo width " + histo_width + " histo.length " + histo.length);
+  println("Histo max " + histo_max + " bar width " + bar_width + " pix/height " + pixel_per_height);
+}
 void draw_frame() {
   // Draw an frames
   background(0, 0, 0);
 
   stroke(255, 255, 255);
-  for (int y = 0; y <= height; y += height / temp_rows) {
-    line(0, y, width, y);
+  for (int y = 0; y <= tv_height; y += tv_height / temp_rows) {
+    line(0, y, tv_width, y);
     //println("y " + y);
-    for (int x = 0; x <= width; x += width / temp_cols) {
-      line(x, 0, x, height);
+    for (int x = 0; x <= tv_width; x += tv_width / temp_cols) {
+      line(x, 0, x, tv_height);
     }
   }
 }
@@ -137,8 +185,9 @@ void serialEvent(Serial port) {
 
     if (command.startsWith("xy[")) { // xy[cols, rows ]
       setup_pixel_data(command);
-    }
-    // data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
+    } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
+      read_histo(command);
+    }// data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
     else if (
       (command.startsWith("[") || command.startsWith("C[")) 
       && ! new_data 
@@ -234,6 +283,39 @@ void setup_pixel_data(String line) {
   }
 }
 
+void read_histo(String line) {
+  // histo[binct, ct,...]
+  String t = null;
+  try {
+    // from the xy[cols, rows ] line
+    StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
+    println("histo :"+line);
+    t = tokens.nextToken(); // reads "histo["
+    t = tokens.nextToken(); // binct
+    println("  binct '"+t+"'");
+    int binct = Integer.parseInt( t );
+    if (histo == null || histo.length != binct) {
+      histo = new int[binct];
+    }
+
+    // cts...
+    for (int i=0; i<binct; i++) {
+      t = tokens.nextToken();
+      //println("  ct "+i+" '"+t+"'");
+      int ct = Integer.parseInt( t );
+
+      histo[i] = ct;
+    }
+    new_histo = true;
+  } 
+  catch (NumberFormatException  e) {
+    println("FAIL bad int from arduino '" + t + "'");
+  }
+  catch (Exception  e) {
+    println("FAIL bad something from arduino " + e.toString());
+  }
+}
+
 boolean one_row(int row_i, String line) {
   // the ir-camera is bottom-right 0,0
   // so "reflect"
@@ -277,8 +359,8 @@ void draw_pixels() {
    } */
   if (say_range.now()) println("range " + min_t + " " + max_t + " color? " +pixel_is_color);
 
-  int box_width = width / temp_cols;
-  int box_height = height / temp_rows;
+  int box_width = tv_width / temp_cols;
+  int box_height = tv_height / temp_rows;
   for (int y=0; y<temp_rows; y++) {
     int y_top_left = box_height * y;
     for (int x=0; x<temp_cols; x++) {
@@ -289,11 +371,11 @@ void draw_pixels() {
         // 16 bit: 5bits red, 6bits green, 5bits blue
         // need to scale back up to 8bit
         int gfx_color = (int) temperatures[x][y];
-        int red = (int) Math.pow(2,(8-5)) * ( (gfx_color >> 5+6) & 0x1f );
-        int green = (int) Math.pow(2,(8-6)) * ( (gfx_color >> 6) & 0x3f);
-        int blue = (int) Math.pow(2,(8-5)) * ( (gfx_color >> 0) & 0x1f);
+        int red = (int) Math.pow(2, (8-5)) * ( (gfx_color >> 5+6) & 0x1f );
+        int green = (int) Math.pow(2, (8-6)) * ( (gfx_color >> 6) & 0x3f);
+        int blue = (int) Math.pow(2, (8-5)) * ( (gfx_color >> 0) & 0x1f);
         //if (y==12 && x == 12) println("C "+gfx_color+" -> "+red," ",blue," ",green);
-        
+
         fill(red, green, blue);
         stroke(red, green, blue );
       } else {
