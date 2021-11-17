@@ -28,6 +28,13 @@
 
 #include <Wire.h>
 #include <Adafruit_AMG88xx.h>
+
+template <class I, class O>
+O map(I x, I in_min, I in_max, O out_min, O out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
 #include <Every.h>
 #include <ExponentialSmooth.h>
 #include "freememory.h"
@@ -213,7 +220,7 @@ void draw_pixels(float * p, uint8_t rows, uint8_t cols) {
   // raw data as ints (not color)
   static CollectStats collect_stats;
   static Every say_stats(1000);
-  static Every slow(1000);
+  static Every slow(100);
   //Serial << F("Free " ) << freeMemory() << endl;
   //Serial << F("in draw..") << endl;
   
@@ -229,7 +236,7 @@ void draw_pixels(float * p, uint8_t rows, uint8_t cols) {
       for (int x = cols - 1; x >= 0; x--) { // 0..cols will give mirrored left/right effect
         float temp = pixels[ x  + y * rows ] ;
         collect_stats.value( temp );
-        if (temp <= last_max - 1) temp = 0;
+        //if (temp <= last_max - 1) temp = 0;
         Serial << temp;
         Serial.print(", ");
       }

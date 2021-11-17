@@ -9,7 +9,7 @@ Visualizing the ir-camera
  * make pipe:
  mkfifo -m 0600 $THISDIR/remote-serial
  ssh cleftpi.local bin/cat-arduino > $THISDIR/remote-serial
-*/
+ */
 
 import java.util.StringTokenizer;
 
@@ -24,6 +24,9 @@ final int total_height =  Math.max(tv_width, histo_height);
 
 float min_temp = 0; // celsius
 float max_temp = 80;
+final float RoomTemp = 22.5; // 21=70f
+float firsthigh_bin_temp = 0.0; //celsius from arduino
+int firsthigh_bin_i = 0;
 
 // reading arduino data state:
 boolean read_next_row = false;
@@ -139,6 +142,22 @@ void draw_histo() {
 
   for (int i = 0; i < histo.length; i++) {
     int bar_height = Math.round(pixel_per_height * histo[i]) ;
+
+    // high temp island
+    if (i == firsthigh_bin_i) {
+      //println("DIV " + i + " == " + firsthigh_bin_i);
+      fill(90, 255, 90); // blue
+      rect(
+        histo_x0 + i * bar_width, histo_height+20, // -bar_height,
+        bar_width, -20
+        );
+    }
+    if (firsthigh_bin_i > 0 && i > firsthigh_bin_i) {
+      fill(255, 90, 90); // red
+    } else {
+      fill(255);
+    }
+
     rect(
       histo_x0 + i * bar_width, histo_height, 
       bar_width, -bar_height 
@@ -146,8 +165,8 @@ void draw_histo() {
     //println("histo " + i + "=" + histo[i]);
     //println("   x " + (histo_x0 + i * bar_width));
   }
-  println("histo width " + histo_width + " histo.length " + histo.length);
-  println("Histo max " + histo_max + " bar width " + bar_width + " pix/height " + pixel_per_height);
+  //println("histo width " + histo_width + " histo.length " + histo.length);
+  //println("Histo max " + histo_max + " bar width " + bar_width + " pix/height " + pixel_per_height);
 }
 void draw_frame() {
   // Draw an frames
@@ -187,6 +206,8 @@ void serialEvent(Serial port) {
       setup_pixel_data(command);
     } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
       read_histo(command);
+    } else if (command.startsWith("firsthigh[")) { // firsthigh[bin_i,temp_v]
+      read_firsthigh(command);
     }// data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
     else if (
       (command.startsWith("[") || command.startsWith("C[")) 
@@ -246,6 +267,8 @@ void serialEvent(Serial port) {
       catch (Exception  e) {
         println("FAIL bad something from arduino " + e.toString());
       }
+    } else {
+      // print(":" + command);
     }
   }
   catch (Exception  e) {
@@ -259,7 +282,7 @@ void setup_pixel_data(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    println("setup pixel data :"+line);
+    print("setup pixel data :"+line);
     t = tokens.nextToken(); // reads "xy"
     t = tokens.nextToken();
     println("  cols '"+t+"'");
@@ -289,10 +312,10 @@ void read_histo(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    println("histo :"+line);
+    print("histo :"+line);
     t = tokens.nextToken(); // reads "histo["
     t = tokens.nextToken(); // binct
-    println("  binct '"+t+"'");
+    //println("  binct '"+t+"'");
     int binct = Integer.parseInt( t );
     if (histo == null || histo.length != binct) {
       histo = new int[binct];
@@ -316,6 +339,31 @@ void read_histo(String line) {
   }
 }
 
+void read_firsthigh(String line) {
+  // firsthigh[bin_i, bin_low_temp]
+  // which bin starts the high-temp island
+  String t = null;
+  try {
+    // from the xy[cols, rows ] line
+    StringTokenizer tokens = new StringTokenizer(line, "[], \t\n\r\f");
+    print("firsthigh :"+line);
+    t = tokens.nextToken(); // reads "firsthigh["
+    t = tokens.nextToken(); // bin_i
+    //println("  bin_i '"+t+"'");
+    firsthigh_bin_i = Integer.parseInt( t );
+
+    // temp
+    t = tokens.nextToken();
+    //println("  1st high '"+t+"'");
+    firsthigh_bin_temp = Float.parseFloat( t );
+  } 
+  catch (NumberFormatException  e) {
+    println("FAIL bad int/float from arduino '" + t + "'");
+  }
+  catch (Exception  e) {
+    println("FAIL bad something from arduino " + e.toString());
+  }
+}
 boolean one_row(int row_i, String line) {
   // the ir-camera is bottom-right 0,0
   // so "reflect"
@@ -379,11 +427,30 @@ void draw_pixels() {
         fill(red, green, blue);
         stroke(red, green, blue );
       } else {
+        // non-interpolated, so my scheme
         float temp = temperatures[x][y];
-        int brightness = Math.round( map(temp, min_t, max_t, 0.0, 255.0) );
+        int red, green, blue;
+        if (firsthigh_bin_i > 0 && temp >= firsthigh_bin_temp) {
+          red = 255;
+          green = int(map( temp, firsthigh_bin_temp, max_t, 0, 255));
+          blue = green;
+        } else if (firsthigh_bin_i > 0 && temp >= RoomTemp) {
+          red = 255;
+          blue = red;
+          green = int(map( temp, RoomTemp, firsthigh_bin_temp, 0, 128));
+        } else {
+          blue = int(map( temp, min_t, firsthigh_bin_temp, 255, 0));
+          green = 0;
+          red = green;
+        }
+        fill(red, green, blue);
+        stroke(red, green, blue);
 
-        fill(brightness, brightness, brightness);
-        stroke(brightness, brightness, brightness);
+        /*int brightness = Math.round( map(temp, min_t, max_t, 0.0, 255.0) );
+         
+         fill(brightness, brightness, brightness);
+         stroke(brightness, brightness, brightness);
+         */
       }
 
       int x_pos = x_top_left + 1;
@@ -445,6 +512,8 @@ void keyPressed() {
     } else if (key == 'x') {
       if (arduino_port != null) { 
         arduino_port.stop();
+        println("Disconnected");
+
         arduino_port = null;
         arduino_reopen = false;
       }
