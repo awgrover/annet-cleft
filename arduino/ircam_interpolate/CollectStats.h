@@ -39,13 +39,12 @@ class CollectStats {
     }
 
     void print_histo() {
-      Serial << F("histo[") << Bins << F(",");
-      for (int i = 0; i < histo->bucket_ct; i++) {
-        Serial << ( (int) histo->buckets[i] ) << F(",");
-      }
-      Serial << F("]") << endl;
+      // extra ,] makes it easier to parse at receiver (i.e. delimiter ,)
+      Serial << F("histo[") << histo->bucket_ct << ","; histo->print_bucket_counts(); Serial << F(",]") << endl;
+      Serial << F("histotemps[") << histo->bucket_ct << ","; histo->print_bucket_temps(); Serial << F(",]") << endl;
+
       float first_high_temp = find_histo_gap_and_cache();
-      Serial << F("firsthigh[") << first_high_temp_i << F(",") << first_high_temp << F("]") << endl;
+      Serial << F("firsthigh[") << first_high_temp_i << F(",") << first_high_temp << F(",]") << endl;
     }
 
     float find_histo_gap_and_cache() {

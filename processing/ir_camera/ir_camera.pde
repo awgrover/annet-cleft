@@ -13,12 +13,13 @@ Visualizing the ir-camera
 
 import java.util.StringTokenizer;
 
+
 // Drawing areas
 final int tv_width = 900;
 final int tv_height = tv_width;
 final int histo_x0 = tv_width + 1;
 final int histo_width = 400;
-final int histo_height = 200;
+int histo_height = 0;
 final int total_width = tv_width + Math.max(0, histo_width);
 final int total_height =  Math.max(tv_width, histo_height);
 
@@ -38,6 +39,7 @@ int temp_rows = 0;
 boolean pixel_is_color = false; // false==temperature values
 
 int histo[] = null;
+float histotemps[] = null;
 boolean new_histo = false;
 
 boolean mouse_down = false;
@@ -60,6 +62,7 @@ static int segment_i; // selected segment to operate on
 void setup() {
   size(1200, 900);
   background(0);
+  histo_height = height;
 
   GlobalProcessing.P = this;
 
@@ -130,37 +133,63 @@ void draw() {
 }
 
 void draw_histo() {
+  // draw horiz histo
+
+  fill(0, 0, 0);
+  rect( histo_x0, 0, histo_x0+histo_width, histo_height);
+
   int histo_max = 0;
+  int histo_min = 1000;
+  int max_temp_i = 0;
   for (int i = 0; i < histo.length; i++) {
     if (histo_max < histo[i]) histo_max = histo[i];
+    if (histo_min > histo[i]) histo_min = histo[i];
+    if (histo[i] > 0) max_temp_i = i;
   }
 
-  float pixel_per_height = histo_height / histo_max;
-  int bar_width = histo_width / histo.length; // pix per bar
+  float pixel_per_height = histo_width / (64/2); // only 64 pixels, so max ct==64
+  int bar_width = histo_height / histo.length; // pix per bar
 
   fill(255);
 
   for (int i = 0; i < histo.length; i++) {
     int bar_height = Math.round(pixel_per_height * histo[i]) ;
 
-    // high temp island
     if (i == firsthigh_bin_i) {
+      // beginning of high-temp island
       //println("DIV " + i + " == " + firsthigh_bin_i);
-      fill(90, 255, 90); // blue
+      fill(90, 255, 90); // green
       rect(
-        histo_x0 + i * bar_width, histo_height+20, // -bar_height,
-        bar_width, -20
+        histo_x0, i * bar_width, 
+        //histo_x0 + i * bar_width, histo_height+20, // -bar_height,
+        histo_height, bar_width
+        //bar_width, -20
         );
+
+      if (histotemps != null) {
+        // text of first temp
+        fill(255, 0, 255);
+        textSize(bar_width * 5);
+        text(""+(histotemps[firsthigh_bin_i] * 9/5 + 32), histo_x0, i * bar_width + bar_width);
+      }
     }
-    if (firsthigh_bin_i > 0 && i > firsthigh_bin_i) {
+    if (firsthigh_bin_i > 0 && i >= firsthigh_bin_i) {
+      // high temps
+      if (histotemps != null && max_temp_i == i) {
+        // text of first temp
+        fill(0, 255, 255);
+        textSize(bar_width * 5);
+        text(""+(histotemps[i] * 9/5 + 32), histo_x0, i * bar_width + bar_width);
+      }
       fill(255, 90, 90); // red
     } else {
+      // low temps
       fill(255);
     }
 
     rect(
-      histo_x0 + i * bar_width, histo_height, 
-      bar_width, -bar_height 
+      histo_x0, i * bar_width, // histo_x0 + i * bar_width, histo_height, 
+      bar_height, bar_width // bar_width, -bar_height 
       );
     //println("histo " + i + "=" + histo[i]);
     //println("   x " + (histo_x0 + i * bar_width));
@@ -170,7 +199,8 @@ void draw_histo() {
 }
 void draw_frame() {
   // Draw an frames
-  background(0, 0, 0);
+  fill(0, 0, 0);
+  rect(0, 0, tv_width, tv_height);
 
   stroke(255, 255, 255);
   for (int y = 0; y <= tv_height; y += tv_height / temp_rows) {
@@ -206,6 +236,8 @@ void serialEvent(Serial port) {
       setup_pixel_data(command);
     } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
       read_histo(command);
+    } else if (command.startsWith("histotemps[")) { // histotemp[bins,t,t,...]
+      read_histotemps(command);
     } else if (command.startsWith("firsthigh[")) { // firsthigh[bin_i,temp_v]
       read_firsthigh(command);
     }// data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
@@ -308,6 +340,7 @@ void setup_pixel_data(String line) {
 
 void read_histo(String line) {
   // histo[binct, ct,...]
+  // cf read_histotemps()
   String t = null;
   try {
     // from the xy[cols, rows ] line
@@ -325,9 +358,42 @@ void read_histo(String line) {
     for (int i=0; i<binct; i++) {
       t = tokens.nextToken();
       //println("  ct "+i+" '"+t+"'");
-      int ct = Integer.parseInt( t );
+      int ct = Integer.valueOf( t );
 
       histo[i] = ct;
+    }
+    new_histo = true;
+  } 
+  catch (NumberFormatException  e) {
+    println("FAIL bad int from arduino '" + t + "'");
+  }
+  catch (Exception  e) {
+    println("FAIL bad something from arduino " + e.toString());
+  }
+}
+void read_histotemps(String line) {
+  // histotemps[binct, t,...]
+  // cf read_histo. this is copypasta. sigh.
+  String t = null;
+  try {
+    // from the xy[cols, rows ] line
+    StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
+    print("histo :"+line);
+    t = tokens.nextToken(); // reads "histo["
+    t = tokens.nextToken(); // binct
+    //println("  binct '"+t+"'");
+    int binct = Integer.parseInt( t );
+    if (histotemps == null || histotemps.length != binct) {
+      histotemps = new float[binct];
+    }
+
+    // cts...
+    for (int i=0; i<binct; i++) {
+      t = tokens.nextToken();
+      //println("  ct "+i+" '"+t+"'");
+      float v = Float.valueOf( t );
+
+      histotemps[i] = v;
     }
     new_histo = true;
   } 

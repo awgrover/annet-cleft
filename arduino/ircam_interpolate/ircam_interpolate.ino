@@ -163,6 +163,7 @@ void loop() {
   static unsigned long last_loop = millis();
   static Every say_rate(1000, true);
   unsigned long start = millis();
+  static float raw_pixels[AMG_COLS * AMG_ROWS]; // only static to save reallocating
 
   check_for_command();
 
@@ -173,7 +174,13 @@ void loop() {
     last_loop = millis();
 
     //read all the pixels
-    amg.readPixels(pixels);
+    constexpr int exp_smooth = 10;
+    
+    amg.readPixels(raw_pixels);
+    for(int i=0; i< AMG_COLS * AMG_ROWS; i++) {
+      pixels[i] = (exp_smooth-1)*(pixels[i]/exp_smooth) + raw_pixels[i]/exp_smooth;
+    }
+  
     //Serial << F("...read") << endl;
 
     if (draw_raw_data) {
