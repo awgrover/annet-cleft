@@ -13,7 +13,6 @@ class CollectStats {
     float min_v, max_v;
     Histogram<float> *histo;
     int first_high_temp_i; // calc'd and cached by find_histo_gap_and_cache
-
     CollectStats() {
       histo = new Histogram<float>(Bins, IRMin, IRMax);
       reset();
@@ -35,7 +34,6 @@ class CollectStats {
       if (max_v < newv) max_v = newv;
 
       histo->value(newv);
-
     }
 
     void print_histo() {
@@ -59,6 +57,7 @@ class CollectStats {
         first_high_temp_i = 0;
         return 0;
       }
+
       int last_gap_temp_i = find_at_least_in_a_row_over_fence<false>(last_low_temp_i, 2, 1);
       if (last_low_temp_i == 0) {
         first_high_temp_i = 0;

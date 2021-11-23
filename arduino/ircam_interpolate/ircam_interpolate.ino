@@ -107,7 +107,7 @@ boolean draw_raw_data = false; // start in interpolate mode
 int JumperGnd = A5;
 int JumperRead = A4;
 
-#define MUX -1 // which port or -1 for don't use
+#define MUX 4 // which port or -1 for don't use
 
 void setup() {
   while (!Serial) delay(100);
@@ -219,7 +219,7 @@ void check_for_command() {
   if (Serial.available() > 0) {
     Serial << F("ser read...");
     char cmd = Serial.read();
-    Serial << F("...read") << endl;
+    Serial << F("...read '") << cmd << F("'") << endl;
   }
 }
 
