@@ -1,0 +1,3 @@
+# (cd ../../processing/ir_camera && ln -s ../../pi/ircam/over-ssh remote-serial)
+# unlink to disable
+exec ssh -t cleftpi.local 'cd ircam; ./ircam.py'
