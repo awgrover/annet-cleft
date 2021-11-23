@@ -8,6 +8,11 @@ try:
     import adafruit_amg88xx
     import adafruit_tca9548a
 
+    sys.path.append("./lib")
+    print(sys.path)
+    from every.every import Every
+    from exponential_smooth import ExponentialSmooth
+
     i2c = busio.I2C(board.SCL, board.SDA)
 
     MUX_CHANNEL = 0 # -1 to not use
@@ -27,12 +32,41 @@ try:
         )
         )
 
+
+    # LOOP
+
+    # we'll smooth the pixels
+    smoothed_pixels = [[0] * IR_WIDTH for _ in range(IR_HEIGHT)]
+    exp_smooth = 5
+
     while True:
-        for row in amg.pixels:
-            print(['{0:.1f}'.format(temp) for temp in row])
-            print("")
-        print("\n")
-        time.sleep(0.1)
+        # data for processing is stereotyped:
+        # dataname[int|float, ... ,] # note final comma for convenience
+
+        say_size = Every(3 * 1000, True) # fire immediately
+        ir_framerate = Every(100)
+        #cam_rate = ExponentialSmooth(5)
+        
+        ## check_for_command()
+
+        if say_size():
+            print("xy[{},{}]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
+
+        if ir_framerate():
+            start_read = time.monotonic()
+
+            print("xy[")
+            for row_i,row in enumerate(amg.pixels):
+                for col_i, temp in enumerate(row):
+                    # I choose to round to .1, raw data is rounded to .25's
+                    smoothed_pixels[row_i][col_i] = round(
+                        (exp_smooth-1)*(smoothed_pixels[row_i][col_i]/exp_smooth) + temp/exp_smooth,
+                        1
+                        )
+                    sys.stdout.write('{:0.1f},'.format( smoothed_pixels[row_i][col_i] ))
+                print("")
+            print("]")
+            print("Read {:0.1f} msec".format( (time.monotonic() - start_read) * 1000))
 
 except KeyboardInterrupt:
     sys.stderr.write("^C\n")
