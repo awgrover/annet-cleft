@@ -28,6 +28,16 @@ float max_temp = 80;
 final float RoomTemp = 22.5; // 21=70f
 float firsthigh_bin_temp = 0.0; //celsius from arduino
 int firsthigh_bin_i = 0;
+ExponentialSmooth background_temp_i = new ExponentialSmooth(100.0);
+
+class TempLocation {
+  // to stucture some data together
+  TempLocation(float init_temp) { 
+    temp=init_temp;
+  }
+  public float temp;
+  public int x=0, y=0;
+};
 
 // reading arduino data state:
 boolean read_next_row = false;
@@ -125,12 +135,34 @@ void draw() {
     }
   }
 
-
-
   // box(400);
   // draw and orient each segment
   fill(255);
 }
+
+void hot_pixels(TempLocation maximum) {
+  int box_width = tv_width / temp_cols;
+  int box_height = tv_height / temp_rows;
+  int y_center = box_height * maximum.y + box_height/2;
+  int x_center = box_width * maximum.x + box_width/2;
+
+  stroke(0, 255, 255);
+  fill(0, 255, 0);
+  ellipse(x_center, y_center, box_width/2, box_height/2);
+
+  int y_bottom = box_height * maximum.y + box_height;
+  int y_top = box_height * maximum.y;
+  int x_left = box_width * maximum.x;
+  stroke(255, 255, 255);
+  //strokeWeight(2);
+  fill(0, 190, 190);
+  textSize(box_height/4);
+  String to_draw = "" + maximum.temp;
+  int text_width = int(textWidth(to_draw));
+  int text_height = int(textAscent() + textDescent());
+  text("" + farenheight(maximum.temp), x_left + 2, y_top + text_height);
+}
+
 
 void draw_histo() {
   // draw horiz histo
@@ -152,8 +184,48 @@ void draw_histo() {
 
   fill(255);
 
+  if (max_temp_i >= 2 ) {
+    if (background_temp_i.to_int() == 0) {
+      // initialize to the max to start
+      // hopefully this is background, 
+      background_temp_i.reset( max_temp_i );
+    } else if ( background_temp_i.to_int() > max_temp_i ) {
+      // quickly backoff if the max gets colder == background
+      background_temp_i.reset( max_temp_i );
+    } else {
+      // track the max, assuming it is background
+      // we want to stay below firsthigh_bin_i
+      int to_heat_island = firsthigh_bin_i - background_temp_i.to_int();
+      if ( to_heat_island >= 0 && to_heat_island <= 3 ) {
+        background_temp_i.reset( firsthigh_bin_i - 2 );
+      } else {
+        // track the max
+        background_temp_i.average( max_temp_i );
+      }
+    }
+  }
+
   for (int i = 0; i < histo.length; i++) {
     int bar_height = Math.round(pixel_per_height * histo[i]) ;
+    float temp = histotemps== null ? 0.0 : histotemps[i];
+
+    if ( i == background_temp_i.to_int()) {
+      fill(0, 0, 190); // blue
+      rect(
+        histo_x0, i * bar_width, 
+        //histo_x0 + i * bar_width, histo_height+20, // -bar_height,
+        histo_width * 0.7, bar_width
+        //bar_width, -20
+        );
+
+      if (histotemps != null) {
+        // text of first temp
+        fill(255, 0, 255);
+        textSize(bar_width * 5);
+
+        text(""+farenheight(temp), histo_x0, i * bar_width + bar_width);
+      }
+    }
 
     if (i == firsthigh_bin_i) {
       // beginning of high-temp island
@@ -162,7 +234,7 @@ void draw_histo() {
       rect(
         histo_x0, i * bar_width, 
         //histo_x0 + i * bar_width, histo_height+20, // -bar_height,
-        histo_height, bar_width
+        histo_width * 0.7, bar_width
         //bar_width, -20
         );
 
@@ -170,9 +242,12 @@ void draw_histo() {
         // text of first temp
         fill(255, 0, 255);
         textSize(bar_width * 5);
-        text(""+(histotemps[firsthigh_bin_i] * 9/5 + 32), histo_x0, i * bar_width + bar_width);
+
+        text(""+farenheight(histotemps[firsthigh_bin_i]), histo_x0, i * bar_width + bar_width);
       }
     }
+
+
     if (firsthigh_bin_i > 0 && i >= firsthigh_bin_i) {
       // high temps
       if (histotemps != null && max_temp_i == i) {
@@ -197,6 +272,11 @@ void draw_histo() {
   //println("histo width " + histo_width + " histo.length " + histo.length);
   //println("Histo max " + histo_max + " bar width " + bar_width + " pix/height " + pixel_per_height);
 }
+
+float farenheight(float c) { 
+  return c * 9/5 + 32;
+}
+
 void draw_frame() {
   // Draw an frames
   fill(0, 0, 0);
@@ -458,12 +538,17 @@ boolean one_row(int row_i, String line) {
 }
 
 void draw_pixels() {  
-  float min_t =max_temp, max_t =min_temp;
+  float min_t =max_temp;
+  TempLocation maximum = new TempLocation(min_temp);
 
   for (int y=0; y<temp_rows; y++) {
     for (int x=0; x<temp_cols; x++) {
       min_t = min(min_t, temperatures[x][y] );
-      max_t = max(max_t, temperatures[x][y] );
+      if (maximum.temp < temperatures[x][y]) {
+        maximum.temp = temperatures[x][y];
+        maximum.x = x;
+        maximum.y = y;
+      }
     }
   }
   /*if (max_t - min_t < 4) {
@@ -471,7 +556,7 @@ void draw_pixels() {
    min_t = min(min_t, 16.0);
    max_t = max(max_t, 30.0);
    } */
-  if (say_range.now()) println("range " + min_t + " " + max_t + " color? " +pixel_is_color);
+  if (say_range.now()) println("range " + min_t + " " + maximum.temp + " color? " +pixel_is_color);
 
   int box_width = tv_width / temp_cols;
   int box_height = tv_height / temp_rows;
@@ -479,6 +564,7 @@ void draw_pixels() {
     int y_top_left = box_height * y;
     for (int x=0; x<temp_cols; x++) {
       int x_top_left = box_width * x;
+      boolean mark_background = false;
 
       if (pixel_is_color) {
         // using adafruit gfx colors:
@@ -498,7 +584,7 @@ void draw_pixels() {
         int red, green, blue;
         if (firsthigh_bin_i > 0 && temp >= firsthigh_bin_temp) {
           red = 255;
-          green = int(map( temp, firsthigh_bin_temp, max_t, 0, 255));
+          green = int(map( temp, firsthigh_bin_temp, maximum.temp, 0, 255));
           blue = green;
         } else if (firsthigh_bin_i > 0 && temp >= RoomTemp) {
           red = 255;
@@ -512,6 +598,9 @@ void draw_pixels() {
         fill(red, green, blue);
         stroke(red, green, blue);
 
+        //println("bkgnd i " + background_temp_i.to_int());
+        mark_background = histotemps != null && ( temp <= histotemps[ background_temp_i.to_int() ] );
+
         /*int brightness = Math.round( map(temp, min_t, max_t, 0.0, 255.0) );
          
          fill(brightness, brightness, brightness);
@@ -519,13 +608,38 @@ void draw_pixels() {
          */
       }
 
+      // fill a pixel block
       int x_pos = x_top_left + 1;
       int y_pos = y_top_left + 1;
       rect(x_pos, y_pos, box_width-2, box_height-2);
       // print(x_pos+" "+y_pos+" "+brightness + " ");
+
+      if (mark_background) {
+        background_pixel(
+          x_top_left, y_top_left, 
+          box_width, box_height 
+          );
+      }
     }
     //println();
   }
+
+  hot_pixels(maximum);
+}
+
+void background_pixel(int x_top_left, int y_top_left, 
+  int box_width, int box_height ) 
+{
+  stroke(180, 180, 180);
+  int strokew = 4;
+  strokeWeight(strokew);
+  noFill();
+  //rect(x_top_left+3, y_top_left+3, 
+  //box_width-strokew-2, box_height-strokew-2);
+  int inset = int(box_width*0.6);
+  rect(x_top_left+inset, y_top_left+inset, 
+  box_width-inset*2, box_height-inset*2);
+  strokeWeight(1);
 }
 
 void mousePressed() { 
