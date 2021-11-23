@@ -57,7 +57,7 @@ PVector mouse_start = new PVector();
 PVector last_mouse = new PVector();
 
 
-Serial arduino_port;
+INonblockingReadLine arduino_port;
 boolean arduino_tracking = false;
 boolean arduino_reopen = true; // false to stop trying
 
@@ -106,6 +106,10 @@ void draw() {
       // you could search Serial.list() for the port your opened
       // (an entry is a string, so save it, check)
     }
+  }
+  if (arduino_port != null) {
+    String remote_line = arduino_port.readLine();
+    if (remote_line != null) println(remote_line);
   }
 
   if ( new_data ) {
@@ -296,8 +300,6 @@ void connect_to_arduino() {
   if (arduino_port == null) {
     arduino_port = connectUSBSerial(115200);
     if (arduino_port != null) {
-      arduino_port.buffer(1024);
-      arduino_port.bufferUntil(10); // lf
       delay(500);
       arduino_port.write("?"); // evoke helo
       arduino_port.write("q"); // synch
@@ -684,14 +686,14 @@ void keyPressed() {
       arduino_port.write("q");
     } else if (key == 'r') {
       if (arduino_port != null) { 
-        arduino_port.stop();
+        arduino_port.close();
         arduino_port = null;
       }
       arduino_reopen = true;
       connect_to_arduino();
     } else if (key == 'x') {
       if (arduino_port != null) { 
-        arduino_port.stop();
+        arduino_port.close();
         println("Disconnected");
 
         arduino_port = null;
