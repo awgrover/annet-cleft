@@ -87,3 +87,16 @@ It also knows how to read the output from arduino/cleft/
 and show it as a visualization of the animiation.
 
 Uses a real simple protocol to talk to the arduino over the serial-port.
+
+# Raspberry Pi
+
+enable ssh, wifi to laptop hotspot, enable i2c
+install arduino-cli
+
+# enable using circuitpython libs:
+sudo apt-get install -y python3-pip i2c-tools
+sudo pip3 install --upgrade setuptools
+pip3 install --upgrade RPi.GPIO adafruit-blinka
+# pin version?
+# 1st is ircam, second is mux
+pip3 install adafruit-circuitpython-amg88xx adafruit-circuitpython-tca9548a
