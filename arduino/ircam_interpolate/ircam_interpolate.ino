@@ -155,7 +155,7 @@ void setup() {
   Serial.println("go");
 }
 
-void loop() {
+void loop() {:
   static Every say_size(3 * 1000, true); // fire immediately
 
   static Every ir_framerate(100);
@@ -232,8 +232,8 @@ void draw_pixels(float * p, uint8_t rows, uint8_t cols) {
   //Serial << F("in draw..") << endl;
   
   if (slow()) {
-    float last_min = collect_stats.min_v;
-    float last_max = collect_stats.max_v;
+    //float last_min = collect_stats.min_v;
+    //float last_max = collect_stats.max_v;
     //Serial << F("slow...") << endl;
     
     collect_stats.reset();

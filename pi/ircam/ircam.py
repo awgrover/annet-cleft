@@ -9,9 +9,11 @@ try:
     import adafruit_tca9548a
 
     sys.path.append("./lib")
-    print(sys.path)
+    import cleft
     from every.every import Every
     from exponential_smooth import ExponentialSmooth
+
+    WRITE_DATA = True # True to print pixels etc
 
     i2c = busio.I2C(board.SCL, board.SDA)
 
@@ -26,6 +28,14 @@ try:
     IR_HEIGHT = 8
     amg = adafruit_amg88xx.AMG88XX(mux)
 
+    def celsius(f):
+        return (f-32) * 5/9
+
+    # add analyzers, .next() for each frame, call with (x,y, temp)
+    analyze = cleft.Analyze() 
+    # analyze.add( cleft.Histo() )
+    analyze.add( cleft.Histo( (100-50)*4, celsius(50),celsius(100) ) )
+
     # startup
     print("Start {} {}\n".format( __file__,
         datetime.datetime.fromtimestamp(pathlib.Path(__file__).stat().st_mtime).isoformat()
@@ -38,6 +48,7 @@ try:
     # we'll smooth the pixels
     smoothed_pixels = [[0] * IR_WIDTH for _ in range(IR_HEIGHT)]
     exp_smooth = 5
+    frame_ct = 0
 
     while True:
         # data for processing is stereotyped:
@@ -45,6 +56,7 @@ try:
 
         say_size = Every(3 * 1000, True) # fire immediately
         ir_framerate = Every(100)
+        say_stats = Every(1000);
         #cam_rate = ExponentialSmooth(5)
         
         ## check_for_command()
@@ -55,7 +67,9 @@ try:
         if ir_framerate():
             start_read = time.monotonic()
 
-            print("xy[")
+            analyze.next()
+
+            print("[") # PROCESSING temp array
             for row_i,row in enumerate(amg.pixels):
                 for col_i, temp in enumerate(row):
                     # I choose to round to .1, raw data is rounded to .25's
@@ -63,10 +77,21 @@ try:
                         (exp_smooth-1)*(smoothed_pixels[row_i][col_i]/exp_smooth) + temp/exp_smooth,
                         1
                         )
-                    sys.stdout.write('{:0.1f},'.format( smoothed_pixels[row_i][col_i] ))
-                print("")
+                    smoothed_temp = smoothed_pixels[row_i][col_i]
+
+                    analyze( row_i, col_i, smoothed_temp)
+
+                    if WRITE_DATA:
+                        sys.stdout.write('{:0.1f},'.format( smoothed_temp ))
+                if WRITE_DATA:
+                    print("")
             print("]")
-            print("Read {:0.1f} msec".format( (time.monotonic() - start_read) * 1000))
+            frame_ct += 1
+
+            if say_stats() and frame_ct > 10:
+                analyze.print_stats()
+
+            print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
 
 except KeyboardInterrupt:
     sys.stderr.write("^C\n")
