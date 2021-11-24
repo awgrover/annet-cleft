@@ -1,3 +1,27 @@
-# (cd ../../processing/ir_camera && ln -s ../../pi/ircam/over-ssh remote-serial)
-# unlink to disable
-exec ssh -t cleftpi.local 'cd ircam; ./ircam.py'
+#!/bin/bash
+# --- # invoke the remote .py to send us info
+# -e # enable use by processing 
+# -d # disable use by processing
+# -h # info/help
+
+processing_target=remote-serial
+me=`basename "$0"`
+
+if [ "$1" == '-e' ]; then
+    (cd ../../processing/ir_camera && ln -s ../../pi/ircam/$me $processing_target && ls -l $processing_target)
+elif [ "$1" == '-d' ]; then
+    -e ../../processing/ir_camera/$processing_target && {set -x; rm ../../processing/ir_camera/$processing_target}
+elif [ "$1" == '-h' ]; then
+    echo $0
+    awk 'FNR==2,/^$/ {print}' "$0"
+    if [ -e ../../processing/ir_camera/$processing_target ]; then
+        ls -l ../../processing/ir_camera/$processing_target
+    else
+        echo "disabled"
+    fi
+elif [ "${1:0:1}" == '-' ]; then
+    echo "WAT? '$1'" > /dev/stderr
+    exit 1
+else
+    exec ssh -t cleftpi.local 'cd ircam; ./ircam.py'
+fi
