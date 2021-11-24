@@ -40,6 +40,7 @@ class Analyze:
             a(x,y,temp)
 
 from map_range import map_range
+
 class Histo(AnalyzerInterface):
     """Keep a histogram of values, from low..high
         methods to convert from index to values
@@ -62,16 +63,28 @@ class Histo(AnalyzerInterface):
         i = map_range( temp, self.low_value, self.high_value, 0, self.bucket_ct-1)
         self.buckets[int(i)] += 1
 
+    def value_at(self, i):
+        return map_range( i, 0, self.bucket_ct, self.low_value, self.high_value) + self.bucket_width/2
+
     def print_stats(self):
         print("  histo")
         print("    buckets {}, low/high {:0.2f}/{:0.2f} width {:0.2f}"
             .format( self.bucket_ct, self.low_value, self.high_value, self.bucket_width )
             )
-        sys.stdout.write("histo[")
+
+        sys.stdout.write("histo[") # PROCESSING
         sys.stdout.write(str(self.bucket_ct))
         sys.stdout.write(",")
         for v in self.buckets:
             sys.stdout.write(str(v))
+            sys.stdout.write(",")
+        print("]")
+
+        sys.stdout.write("histotemps[") # PROCESSING
+        sys.stdout.write(str(self.bucket_ct))
+        sys.stdout.write(",")
+        for i in range(self.bucket_ct):
+            sys.stdout.write("{:0.2f}".format( self.value_at(i) ))
             sys.stdout.write(",")
         print("]")
 

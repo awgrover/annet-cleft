@@ -109,7 +109,7 @@ void draw() {
   }
   if (arduino_port != null) {
     String remote_line = arduino_port.readLine();
-    if (remote_line != null) println(remote_line);
+    if (remote_line != null) consume_ircam_data(remote_line);
   }
 
   if ( new_data ) {
@@ -307,13 +307,17 @@ void connect_to_arduino() {
   }
 }
 
-void serialEvent(Serial port) {
+void x_serialEvent(Serial port) { // disabled
   // event driven: each line that comes in,
   // so we have to maintain state. yech.
+  consume_ircam_data(port.readString());
+}
 
+void consume_ircam_data(String command) {
+  // arduino_port is a INonblockingReadLine
+  // from Serial (arduino) or a process (via ssh)
   try {
-    String command = port.readString();
-
+    
     if (command.startsWith("xy[")) { // xy[cols, rows ]
       setup_pixel_data(command);
     } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
@@ -341,7 +345,9 @@ void serialEvent(Serial port) {
       }
     } else if (read_next_row) {
       read_row_i += 1;
+      //print(read_row_i);
       if (command.startsWith("]")) {
+        print(".");
         if (read_row_i == temp_rows) { // ] is on own line
           //println("* "+command + "<end data at "+(read_row_i+1)+">");
           new_data = true;
@@ -402,7 +408,7 @@ void setup_pixel_data(String line) {
     println("  cols '"+t+"'");
     int cols = Integer.parseInt( t );
     t = tokens.nextToken();
-    println("  rows '"+t+"'");
+    //println("  rows '"+t+"'");
     int rows = Integer.parseInt( t );
 
     if (temperatures == null || temp_cols != cols || temp_rows != rows) {
@@ -413,7 +419,7 @@ void setup_pixel_data(String line) {
     }
   } 
   catch (NumberFormatException  e) {
-    println("FAIL bad float from arduino '" + t + "'");
+    println("FAIL bad float from arduino '" + t + "'" + " in '" + line + "'");
   }
   catch (Exception  e) {
     println("FAIL bad something from arduino " + e.toString());
@@ -453,6 +459,7 @@ void read_histo(String line) {
     println("FAIL bad something from arduino " + e.toString());
   }
 }
+
 void read_histotemps(String line) {
   // histotemps[binct, t,...]
   // cf read_histo. this is copypasta. sigh.

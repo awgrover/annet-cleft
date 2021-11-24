@@ -49,27 +49,29 @@ try:
     smoothed_pixels = [[0] * IR_WIDTH for _ in range(IR_HEIGHT)]
     exp_smooth = 5
     frame_ct = 0
+        
+    say_size = Every(3.0, True) # fire immediately
+    ir_framerate = Every(0.100)
+    say_stats = Every(1.0);
+    #cam_rate = ExponentialSmooth(5)
 
     while True:
         # data for processing is stereotyped:
         # dataname[int|float, ... ,] # note final comma for convenience
 
-        say_size = Every(3 * 1000, True) # fire immediately
-        ir_framerate = Every(100)
-        say_stats = Every(1000);
-        #cam_rate = ExponentialSmooth(5)
         
         ## check_for_command()
 
         if say_size():
-            print("xy[{},{}]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
+            print("xy[{},{},]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
 
         if ir_framerate():
             start_read = time.monotonic()
 
             analyze.next()
 
-            print("[") # PROCESSING temp array
+            # Print the pixels, analyzing as we go
+            sys.stdout.write("[") # PROCESSING temp array
             for row_i,row in enumerate(amg.pixels):
                 for col_i, temp in enumerate(row):
                     # I choose to round to .1, raw data is rounded to .25's
