@@ -285,3 +285,28 @@ class BackgroundTemp(AnalyzerInterface):
                 else:
                     # track the max
                     self.background_temp.update( self.minmax.high );
+
+class HotSpot(AnalyzerInterface):
+    """Find hotspot if > background"""
+
+    def __init__(self, minmax):
+        self.minmax = minmax
+        self.hotspot_xy = XY(0,0)
+        self.next()
+
+    def __call__(self,x,y,temp):
+        pass
+
+    def next(self):
+        self.hotspot_temp = -1.0
+
+    def print_stats(self):
+        pass
+
+    def post(self):
+        """do the whole frame analysis"""
+        if max > background 
+            #if not boredwithspot
+            self.hotspot_xy = self.minmax.high_xy
+            self.hotspot_temp = self.minmax.high
+

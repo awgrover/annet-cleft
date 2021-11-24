@@ -116,9 +116,7 @@ public class NonblockingSerialReadLine implements INonblockingReadLine {
             if (line == null) {
               break;
             }
-            if (line.contains("[") ) {
-              lines.add(line);
-            }
+            lines.add(line);
           }
         } 
         //catch (IOException e) {
