@@ -28,7 +28,9 @@ float max_temp = 80;
 final float RoomTemp = 22.5; // 21=70f
 float firsthigh_bin_temp = 0.0; //celsius from arduino
 int firsthigh_bin_i = 0;
-ExponentialSmooth background_temp_i = new ExponentialSmooth(100.0);
+//ExponentialSmooth background_temp_i = new ExponentialSmooth(100.0);
+int background_temp_i = 0;
+float background_temp = 0.0;
 
 class TempLocation {
   // to stucture some data together
@@ -66,8 +68,6 @@ final char[] shift_numbers = {'!', '@', '#', '$', '%', '^', '&', '*', '(', ')'};
 
 Every check_arduino_port = new Every(500);
 Every say_range = new Every(1000);
-
-static int segment_i; // selected segment to operate on
 
 void setup() {
   size(1200, 900);
@@ -107,6 +107,7 @@ void draw() {
       // (an entry is a string, so save it, check)
     }
   }
+
   if (arduino_port != null) {
     String remote_line = arduino_port.readLine();
     if (remote_line != null) consume_ircam_data(remote_line);
@@ -122,15 +123,6 @@ void draw() {
     draw_histo(); 
     new_histo = false;
   }
-  /*background(90);
-   
-   fill(0, 0, 255);
-   stroke(0, 90, 255);
-   sphere(20);
-   
-   stroke(0);
-   */
-
 
   if (mouse_down) {
     // only on change
@@ -138,10 +130,6 @@ void draw() {
       last_mouse.set(mouseX, mouseY);
     }
   }
-
-  // box(400);
-  // draw and orient each segment
-  fill(255);
 }
 
 void hot_pixels(TempLocation maximum) {
@@ -187,33 +175,34 @@ void draw_histo() {
   int bar_width = histo_height / histo.length; // pix per bar
 
   fill(255);
-
+  /*
   if (max_temp_i >= 2 ) {
-    if (background_temp_i.to_int() == 0) {
-      // initialize to the max to start
-      // hopefully this is background, 
-      background_temp_i.reset( max_temp_i );
-    } else if ( background_temp_i.to_int() > max_temp_i ) {
-      // quickly backoff if the max gets colder == background
-      background_temp_i.reset( max_temp_i );
-    } else {
-      // track the max, assuming it is background
-      // we want to stay below firsthigh_bin_i
-      int to_heat_island = firsthigh_bin_i - background_temp_i.to_int();
-      if ( to_heat_island >= 0 && to_heat_island <= 3 ) {
-        background_temp_i.reset( firsthigh_bin_i - 2 );
-      } else {
-        // track the max
-        background_temp_i.average( max_temp_i );
-      }
-    }
-  }
-
+   if (background_temp_i.to_int() == 0) {
+   // initialize to the max to start
+   // hopefully this is background, 
+   background_temp_i.reset( max_temp_i );
+   } else if ( background_temp_i.to_int() > max_temp_i ) {
+   // quickly backoff if the max gets colder == background
+   background_temp_i.reset( max_temp_i );
+   } else {
+   // track the max, assuming it is background
+   // we want to stay below firsthigh_bin_i
+   int to_heat_island = firsthigh_bin_i - background_temp_i.to_int();
+   if ( to_heat_island >= 0 && to_heat_island <= 3 ) {
+   background_temp_i.reset( firsthigh_bin_i - 2 );
+   } else {
+   // track the max
+   background_temp_i.average( max_temp_i );
+   }
+   }
+   }
+   */
+   
   for (int i = 0; i < histo.length; i++) {
     int bar_height = Math.round(pixel_per_height * histo[i]) ;
     float temp = histotemps== null ? 0.0 : histotemps[i];
 
-    if ( i == background_temp_i.to_int()) {
+    if ( i == background_temp_i) {
       fill(0, 0, 190); // blue
       rect(
         histo_x0, i * bar_width, 
@@ -317,7 +306,7 @@ void consume_ircam_data(String command) {
   // arduino_port is a INonblockingReadLine
   // from Serial (arduino) or a process (via ssh)
   try {
-    
+
     if (command.startsWith("xy[")) { // xy[cols, rows ]
       setup_pixel_data(command);
     } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
@@ -326,6 +315,12 @@ void consume_ircam_data(String command) {
       read_histotemps(command);
     } else if (command.startsWith("firsthigh[")) { // firsthigh[bin_i,temp_v]
       read_firsthigh(command);
+    } else if (command.startsWith("background[")) { // background[bin_i,temp_v]
+      read_background(command);
+    } else if (command.startsWith("endstats[]")) { // end of stats
+      // .clear seems to hang us sigh.
+      // if (arduino_port != null) arduino_port.clear();
+      println("QUE " + arduino_port.size());
     }// data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
     else if (
       (command.startsWith("[") || command.startsWith("C[")) 
@@ -433,7 +428,7 @@ void read_histo(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    print("histo :"+line);
+    println("histo :");
     t = tokens.nextToken(); // reads "histo["
     t = tokens.nextToken(); // binct
     //println("  binct '"+t+"'");
@@ -467,7 +462,7 @@ void read_histotemps(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    print("histo :"+line);
+    println("histotemp :");
     t = tokens.nextToken(); // reads "histo["
     t = tokens.nextToken(); // binct
     //println("  binct '"+t+"'");
@@ -501,7 +496,7 @@ void read_firsthigh(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[], \t\n\r\f");
-    print("firsthigh :"+line);
+    println("firsthigh :"+line);
     t = tokens.nextToken(); // reads "firsthigh["
     t = tokens.nextToken(); // bin_i
     //println("  bin_i '"+t+"'");
@@ -519,6 +514,33 @@ void read_firsthigh(String line) {
     println("FAIL bad something from arduino " + e.toString());
   }
 }
+
+void read_background(String line) {
+  // background[bin_i, bin_temp]
+  // which bin starts the high-temp island
+  String t = null;
+  try {
+    // from the xy[cols, rows ] line
+    StringTokenizer tokens = new StringTokenizer(line, "[], \t\n\r\f");
+    println("background :"+line);
+    t = tokens.nextToken(); // reads "background["
+    t = tokens.nextToken(); // bin_i
+    //println("  bin_i '"+t+"'");
+    background_temp_i = Integer.parseInt( t );
+
+    // temp
+    t = tokens.nextToken();
+    //println("  1st high '"+t+"'");
+    background_temp = Float.parseFloat( t );
+  } 
+  catch (NumberFormatException  e) {
+    println("FAIL bad int/float from arduino '" + t + "'");
+  }
+  catch (Exception  e) {
+    println("FAIL bad something from arduino " + e.toString());
+  }
+}
+
 boolean one_row(int row_i, String line) {
   // the ir-camera is bottom-right 0,0
   // so "reflect"
@@ -565,7 +587,10 @@ void draw_pixels() {
    min_t = min(min_t, 16.0);
    max_t = max(max_t, 30.0);
    } */
-  if (say_range.now()) println("range " + min_t + " " + maximum.temp + " color? " +pixel_is_color);
+  if (say_range.now()) { 
+    println("range " + min_t + " " + maximum.temp + " color? " +pixel_is_color);
+    if (firsthigh_bin_i == 0) println("No firsthigh");
+  }
 
   int box_width = tv_width / temp_cols;
   int box_height = tv_height / temp_rows;
@@ -599,16 +624,20 @@ void draw_pixels() {
           red = 255;
           blue = red;
           green = int(map( temp, RoomTemp, firsthigh_bin_temp, 0, 128));
-        } else {
+        } else if (firsthigh_bin_i > 0) {
           blue = int(map( temp, min_t, firsthigh_bin_temp, 255, 0));
           green = 0;
           red = green;
+        } else {
+          green = 0;
+          red = 60;
+          blue = red;
         }
         fill(red, green, blue);
         stroke(red, green, blue);
 
         //println("bkgnd i " + background_temp_i.to_int());
-        mark_background = histotemps != null && ( temp <= histotemps[ background_temp_i.to_int() ] );
+        mark_background = histotemps != null && ( temp <= background_temp );
 
         /*int brightness = Math.round( map(temp, min_t, max_t, 0.0, 255.0) );
          
@@ -647,7 +676,7 @@ void background_pixel(int x_top_left, int y_top_left,
   //box_width-strokew-2, box_height-strokew-2);
   int inset = int(box_width*0.6);
   rect(x_top_left+inset, y_top_left+inset, 
-  box_width-inset*2, box_height-inset*2);
+    box_width-inset*2, box_height-inset*2);
   strokeWeight(1);
 }
 
@@ -671,11 +700,7 @@ void keyPressed() {
   if (key != CODED) {
     // ascii's 1..9,a..e -> 0..14 
     if (key >= '0' && key <= '9') {
-      segment_i = int(key) - int('1');
-      println("select " + segment_i);
     } else if (key >= 'a' && key <= 'f') {
-      segment_i = int(key) - int('a') + 10 - 1; // a is 10th which is [9]
-      println("select " + segment_i);
     } else if (key == '?') {
       if (arduino_port != null) { 
         arduino_port.write('?');

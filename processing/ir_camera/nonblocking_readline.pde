@@ -1,6 +1,8 @@
 public interface INonblockingReadLine {
   public String readLine();
   public void close();
+  public void clear(); // whack any queued lines
+  public int size(); // in que
   public void write(String x);
   public void write(char x);
 }
@@ -49,7 +51,7 @@ public class NonblockingBufferedReadLine implements INonblockingReadLine {
     backgroundReaderThread.start();
   }
 
-  public String readLine()  {
+  public String readLine() {
     try {
       return closed || lines.isEmpty() ? null : lines.take();
     } 
@@ -78,6 +80,14 @@ public class NonblockingBufferedReadLine implements INonblockingReadLine {
     }
   }
 
+  public void clear() {
+    lines.clear();
+  }
+
+  public int size() {
+    return lines.size();
+  }
+
   public void close() {
     if (backgroundReaderThread != null) {
       backgroundReaderThread.interrupt();
@@ -91,7 +101,7 @@ public class NonblockingSerialReadLine implements INonblockingReadLine {
   private volatile boolean closed = false;
   private Thread backgroundReaderThread = null;
   private Serial serial;
-  
+
   public NonblockingSerialReadLine(final Serial bufferedReader) {
     this.serial = bufferedReader;
     bufferedReader.buffer(1024);
@@ -106,7 +116,9 @@ public class NonblockingSerialReadLine implements INonblockingReadLine {
             if (line == null) {
               break;
             }
-            lines.add(line);
+            if (line.contains("[") ) {
+              lines.add(line);
+            }
           }
         } 
         //catch (IOException e) {
@@ -138,6 +150,14 @@ public class NonblockingSerialReadLine implements INonblockingReadLine {
   }
   public void write(char x) {
     this.serial.write(x);
+  }
+
+  public void clear() {
+    lines.clear();
+  }
+
+  public int size() {
+    return lines.size();
   }
 
   public void close() {
