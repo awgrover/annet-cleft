@@ -33,7 +33,7 @@ try:
 
     # add analyzers, .next() for each frame, call with (x,y, temp)
     analyze = cleft.Analyze() 
-    histo = cleft.Histo( (100-60)*2, celsius(60),celsius(100) )
+    histo = cleft.Histo( (90-60)*2, celsius(60),celsius(90) )
     minmax = cleft.MinMax() 
     firsthigh = cleft.FirstHigh(histo)
     analyze.accumulator( histo )
