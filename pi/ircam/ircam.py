@@ -33,8 +33,13 @@ try:
 
     # add analyzers, .next() for each frame, call with (x,y, temp)
     analyze = cleft.Analyze() 
-    # analyze.add( cleft.Histo() )
-    analyze.add( cleft.Histo( (100-50)*4, celsius(50),celsius(100) ) )
+    histo = cleft.Histo( (100-60)*2, celsius(60),celsius(100) )
+    minmax = cleft.MinMax() 
+    firsthigh = cleft.FirstHigh(histo)
+    analyze.accumulator( histo )
+    analyze.accumulator( minmax )
+    analyze.post( firsthigh ) # uses histo for analysis
+    analyze.post( cleft.BackgroundTemp(minmax, histo, firsthigh) ) # uses others for analysis
 
     # startup
     print("Start {} {}\n".format( __file__,
@@ -51,9 +56,8 @@ try:
     frame_ct = 0
         
     say_size = Every(3.0, True) # fire immediately
-    ir_framerate = Every(0.100)
+    ir_framerate = Every(0.500) # hmm, processing gets way behind at 0.1
     say_stats = Every(1.0);
-    #cam_rate = ExponentialSmooth(5)
 
     while True:
         # data for processing is stereotyped:
@@ -73,12 +77,13 @@ try:
             # Print the pixels, analyzing as we go
             sys.stdout.write("[") # PROCESSING temp array
             for row_i,row in enumerate(amg.pixels):
-                for col_i, temp in enumerate(row):
+                for col_i, temp in enumerate(reversed(row)): # reversed if facing camera
                     # I choose to round to .1, raw data is rounded to .25's
                     smoothed_pixels[row_i][col_i] = round(
                         (exp_smooth-1)*(smoothed_pixels[row_i][col_i]/exp_smooth) + temp/exp_smooth,
                         1
                         )
+                    smoothed_pixels[row_i][col_i] = temp
                     smoothed_temp = smoothed_pixels[row_i][col_i]
 
                     analyze( row_i, col_i, smoothed_temp)
@@ -88,10 +93,12 @@ try:
                 if WRITE_DATA:
                     print("")
             print("]")
+            analyze() # for "posts"
             frame_ct += 1
 
             if say_stats() and frame_ct > 10:
                 analyze.print_stats()
+                print("endstats[]")
 
             print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
 
