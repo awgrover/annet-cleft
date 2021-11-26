@@ -34,12 +34,44 @@ float background_temp = 0.0;
 
 class TempLocation {
   // to stucture some data together
-  TempLocation(float init_temp) { 
-    temp=init_temp;
-  }
   public float temp;
+  public int i; // bin i
   public int x=0, y=0;
+  TempLocation() { 
+    this(0.0, -1, -1, -1);
+  }
+  TempLocation(float init_temp, int i, int x, int y) { 
+    temp=init_temp;
+    this.i=i;
+    this.x=x;
+    this.y=y;
+  }
+  public void read_data(String line, String why) {
+    this.temp = 0;
+    this.i = -1;
+    this.x = -1;
+    this.y = -1;
+    //println(why + " " + line);
+    StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
+    tokens.nextToken(); // discard "blah["
+    try {
+      this.i = read_a_int(tokens, why+" .i");
+      this.temp = read_a_float(tokens, why+" .temp");
+      this.x = read_a_int(tokens, why+" .x");
+      this.y = read_a_int(tokens, why+" .y");
+    }
+    catch (NumberFormatException  e) {
+      // message already printed by read_a_x()
+      this.temp = 0; // the flag
+    }
+  }
+  String dump() {
+    return String.format("[%d]=%.2f @(%d,%d)", this.i, this.temp, this.x, this.y);
+  }
 };
+
+TempLocation low = new TempLocation();
+TempLocation high = new TempLocation();
 
 // reading arduino data state:
 boolean read_next_row = false;
@@ -133,6 +165,7 @@ void draw() {
 }
 
 void hot_pixels(TempLocation maximum) {
+  // green circle == maximum-temp location
   int box_width = tv_width / temp_cols;
   int box_height = tv_height / temp_rows;
   int y_center = box_height * maximum.y + box_height/2;
@@ -197,7 +230,7 @@ void draw_histo() {
    }
    }
    */
-   
+
   for (int i = 0; i < histo.length; i++) {
     int bar_height = Math.round(pixel_per_height * histo[i]) ;
     float temp = histotemps== null ? 0.0 : histotemps[i];
@@ -306,8 +339,13 @@ void consume_ircam_data(String command) {
   // arduino_port is a INonblockingReadLine
   // from Serial (arduino) or a process (via ssh)
   try {
-
-    if (command.startsWith("xy[")) { // xy[cols, rows ]
+    if (command.startsWith("Traceback")) {
+      println("Error from serial|port!");
+      while (true) {
+        String line = arduino_port.readLine();
+        if (line != null) print(line);
+      }
+    } else if (command.startsWith("xy[")) { // xy[cols, rows ]
       setup_pixel_data(command);
     } else if (command.startsWith("histo[")) { // histo[bins,ct,ct,...]
       read_histo(command);
@@ -317,6 +355,12 @@ void consume_ircam_data(String command) {
       read_firsthigh(command);
     } else if (command.startsWith("background[")) { // background[bin_i,temp_v]
       read_background(command);
+    } else if (command.startsWith("mintemp[")) { // mintemp[bin_i,temp_v,x,y]
+      low.read_data(command, "mintemp[");
+      println("mintemp: " + low.dump());
+    } else if (command.startsWith("maxtemp[")) { // mintemp[bin_i,temp_v,x,y]
+      high.read_data(command, "maxtemp[");
+      println("maxtemp: " + high.dump());
     } else if (command.startsWith("endstats[]")) { // end of stats
       // .clear seems to hang us sigh.
       // if (arduino_port != null) arduino_port.clear();
@@ -421,6 +465,36 @@ void setup_pixel_data(String line) {
   }
 }
 
+float read_a_float(StringTokenizer tokens, String why) {
+  String t = null;  
+  try {
+    t = tokens.nextToken();
+    return Float.valueOf( t );
+  }
+  catch (NumberFormatException  e) {
+    println("FAIL bad float from serial|port during '"+why+"': '" + t + "'");
+    throw e;
+  }
+  catch (Exception  e) {
+    println("FAIL bad float from serial|port during '"+why+"': '" + t + "' "+ e.toString() );
+  }
+  return 0;
+}
+int read_a_int(StringTokenizer tokens, String why) {
+  String t = null;
+  try {
+    t = tokens.nextToken();
+    return Integer.valueOf( t );
+  }
+  catch (NumberFormatException  e) {
+    println("FAIL bad int from serial|port during '"+why+"': '" + t + "'");
+    throw e;
+  }
+  catch (Exception  e) {
+    println("FAIL bad int from serial|port during '"+why+"': '" + t + "' "+ e.toString() );
+  }
+  return 0;
+}
 void read_histo(String line) {
   // histo[binct, ct,...]
   // cf read_histotemps()
@@ -553,7 +627,7 @@ boolean one_row(int row_i, String line) {
     // println("  col "+col_i+" = "+t);
     try {
       float temp = Float.parseFloat( t );
-      temperatures[temp_cols - 1 - col_i ][temp_rows - 1 - row_i ] = temp;
+      temperatures[col_i ][row_i ] = temp;
     } 
     catch (NumberFormatException  e) {
       println("FAIL bad float from arduino '" + t + "'");
@@ -569,26 +643,26 @@ boolean one_row(int row_i, String line) {
 }
 
 void draw_pixels() {  
-  float min_t =max_temp;
-  TempLocation maximum = new TempLocation(min_temp);
-
-  for (int y=0; y<temp_rows; y++) {
-    for (int x=0; x<temp_cols; x++) {
-      min_t = min(min_t, temperatures[x][y] );
-      if (maximum.temp < temperatures[x][y]) {
-        maximum.temp = temperatures[x][y];
-        maximum.x = x;
-        maximum.y = y;
-      }
-    }
-  }
+  /*float min_t =max_temp;
+   TempLocation maximum = new TempLocation(min_temp);
+   
+   for (int y=0; y<temp_rows; y++) {
+   for (int x=0; x<temp_cols; x++) {
+   min_t = min(min_t, temperatures[x][y] );
+   if (maximum.temp < temperatures[x][y]) {
+   maximum.temp = temperatures[x][y];
+   maximum.x = x;
+   maximum.y = y;
+   }
+   }
+   }*/
   /*if (max_t - min_t < 4) {
    // at least 16..30
    min_t = min(min_t, 16.0);
    max_t = max(max_t, 30.0);
    } */
   if (say_range.now()) { 
-    println("range " + min_t + " " + maximum.temp + " color? " +pixel_is_color);
+    println("range " + low.temp + " " + high.temp + " color? " +pixel_is_color);
     if (firsthigh_bin_i == 0) println("No firsthigh");
   }
 
@@ -617,18 +691,22 @@ void draw_pixels() {
         float temp = temperatures[x][y];
         int red, green, blue;
         if (firsthigh_bin_i > 0 && temp >= firsthigh_bin_temp) {
+          // reds == higher than gap
           red = 255;
-          green = int(map( temp, firsthigh_bin_temp, maximum.temp, 0, 255));
+          green = int(map( temp, firsthigh_bin_temp, high.temp, 0, 255));
           blue = green;
         } else if (firsthigh_bin_i > 0 && temp >= RoomTemp) {
+          // purples > arbitrary RoomTemp
           red = 255;
           blue = red;
           green = int(map( temp, RoomTemp, firsthigh_bin_temp, 0, 128));
         } else if (firsthigh_bin_i > 0) {
-          blue = int(map( temp, min_t, firsthigh_bin_temp, 255, 0));
+          // blues < gap
+          blue = int(map( temp, low.temp, firsthigh_bin_temp, 255, 0));
           green = 0;
           red = green;
         } else {
+          // light purple == no gap yet
           green = 0;
           red = 60;
           blue = red;
@@ -639,7 +717,7 @@ void draw_pixels() {
         //println("bkgnd i " + background_temp_i.to_int());
         mark_background = histotemps != null && ( temp <= background_temp );
 
-        /*int brightness = Math.round( map(temp, min_t, max_t, 0.0, 255.0) );
+        /*int brightness = Math.round( map(temp, low.temp, max_t, 0.0, 255.0) );
          
          fill(brightness, brightness, brightness);
          stroke(brightness, brightness, brightness);
@@ -662,12 +740,13 @@ void draw_pixels() {
     //println();
   }
 
-  hot_pixels(maximum);
+  hot_pixels(high);
 }
 
 void background_pixel(int x_top_left, int y_top_left, 
   int box_width, int box_height ) 
 {
+  // square box <= background temp
   stroke(180, 180, 180);
   int strokew = 4;
   strokeWeight(strokew);

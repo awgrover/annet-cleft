@@ -120,7 +120,9 @@ class Histo(AnalyzerInterface):
         sys.stdout.write("histo[") # PROCESSING
         sys.stdout.write(str(self.bucket_ct))
         sys.stdout.write(",")
-        for v in self.buckets:
+        for i,v in enumerate(self.buckets):
+            if not (i % 10):
+                sys.stdout.write(" ")
             sys.stdout.write(str(v))
             sys.stdout.write(",")
         print("]")
@@ -129,30 +131,67 @@ class Histo(AnalyzerInterface):
         sys.stdout.write(str(self.bucket_ct))
         sys.stdout.write(",")
         for i in range(self.bucket_ct):
+            if not (i % 10):
+                sys.stdout.write(" ")
             sys.stdout.write("{:0.2f}".format( self.value_at(i) ))
             sys.stdout.write(",")
         print("]")
 
+class TemperatureLocation:
+    """holds a temp, i, x,y"""
+    def __init__(self,temp, i, x, y):
+        self.temp = temp
+        self.i = i
+        self.x = x
+        self.y = y
+
+    def to_print(self):
+        # i,temp,x,y
+        return "{},{:0.2f},{},{}".format( 
+            self.i,self.temp, 
+            self.x,
+            self.y
+            )
+
 class MinMax(AnalyzerInterface):
     """Min & max"""
-    def __init__(self):
+    def __init__(self, histo):
+        self.histo = histo
         self.next()
 
     def next(self):
-        self.low = 1000.0
-        self.high = 0.0
+        self.low_tl = TemperatureLocation(1000.0, -1, -1, -1)
+        self.high_tl = TemperatureLocation(0.0, -1, -1, -1)
+
+    @property
+    def high(self):
+        return self.high_tl.temp
+
+    @property
+    def low(self):
+        return self.low_tl.temp
 
     def __call__(self,x,y,temp):
-        if (self.low > temp):
-            self.low = temp
-        if (self.high < temp):
-            self.high = temp
+        if (self.low_tl.temp > temp):
+            self.low_tl.temp = temp
+            self.low_tl.i = self.histo.i_at( self.low_tl.temp )
+            self.low_tl.x=x
+            self.low_tl.y=y
+        if (self.high_tl.temp < temp):
+            self.high_tl.temp = temp
+            self.high_tl.i = self.histo.i_at( self.high_tl.temp )
+            self.high_tl.x=x
+            self.high_tl.y=y
 
     def post():
+        # not used
         pass
 
     def print_stats(self):
-        print("minmax[{:f},{:f},]".format(self.low,self.high)) # PROCESSING
+        # mintemp[temp,i,x,y,]
+        # maxtemp[[temp,i,x,y,]
+        print("mintemp[{},]".format( self.low_tl.to_print() ))
+        print("maxtemp[{},]".format( self.high_tl.to_print() ))
 
 class FirstHigh(AnalyzerInterface):
     """Looks in the histo for the pattern:
@@ -289,24 +328,24 @@ class BackgroundTemp(AnalyzerInterface):
 class HotSpot(AnalyzerInterface):
     """Find hotspot if > background"""
 
-    def __init__(self, minmax):
+    def __init__(self, minmax, background):
         self.minmax = minmax
-        self.hotspot_xy = XY(0,0)
+        self.background = background
+        self.hotspot = TemperatureLocation(0,-1,-1,-1) # we'll track this over time
         self.next()
 
     def __call__(self,x,y,temp):
         pass
 
     def next(self):
-        self.hotspot_temp = -1.0
+        pass
 
     def print_stats(self):
         pass
 
     def post(self):
         """do the whole frame analysis"""
-        if max > background 
+        if background.fisthigh > 0 and self.minmax.high.temp > background.firsthigh:
             #if not boredwithspot
-            self.hotspot_xy = self.minmax.high_xy
-            self.hotspot_temp = self.minmax.high
+            self.hotspot = self.minmax.high
 

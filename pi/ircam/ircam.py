@@ -14,6 +14,8 @@ try:
     from exponential_smooth import ExponentialSmooth
 
     WRITE_DATA = True # True to print pixels etc
+    MIRRORED = False # mirror left-right of camera == as if facing camera
+    INVERTED = True # mirror top-bottom of camera
 
     i2c = busio.I2C(board.SCL, board.SDA)
 
@@ -34,12 +36,15 @@ try:
     # add analyzers, .next() for each frame, call with (x,y, temp)
     analyze = cleft.Analyze() 
     histo = cleft.Histo( (90-60)*2, celsius(60),celsius(90) )
-    minmax = cleft.MinMax() 
+    minmax = cleft.MinMax(histo) 
     firsthigh = cleft.FirstHigh(histo)
+    background = cleft.BackgroundTemp(minmax, histo, firsthigh)
+    hotspot = cleft.HotSpot(minmax, background)
     analyze.accumulator( histo )
     analyze.accumulator( minmax )
     analyze.post( firsthigh ) # uses histo for analysis
-    analyze.post( cleft.BackgroundTemp(minmax, histo, firsthigh) ) # uses others for analysis
+    analyze.post( background ) # uses others for analysis
+    #analyze.post( hotspot ) # uses others for analysis
 
     # startup
     print("Start {} {}\n".format( __file__,
@@ -76,17 +81,16 @@ try:
 
             # Print the pixels, analyzing as we go
             sys.stdout.write("[") # PROCESSING temp array
-            for row_i,row in enumerate(amg.pixels):
-                for col_i, temp in enumerate(reversed(row)): # reversed if facing camera
+            for row_i,row in enumerate(reversed(amg.pixels) if INVERTED else amg.pixels):
+                for col_i, temp in enumerate(reversed(row) if MIRRORED else row): # mirrored if facing camera
                     # I choose to round to .1, raw data is rounded to .25's
                     smoothed_pixels[row_i][col_i] = round(
                         (exp_smooth-1)*(smoothed_pixels[row_i][col_i]/exp_smooth) + temp/exp_smooth,
                         1
                         )
-                    smoothed_pixels[row_i][col_i] = temp
                     smoothed_temp = smoothed_pixels[row_i][col_i]
 
-                    analyze( row_i, col_i, smoothed_temp)
+                    analyze( col_i,row_i, smoothed_temp)
 
                     if WRITE_DATA:
                         sys.stdout.write('{:0.1f},'.format( smoothed_temp ))
