@@ -44,9 +44,10 @@ try:
     analyze.accumulator( minmax )
     analyze.post( firsthigh ) # uses histo for analysis
     analyze.post( background ) # uses others for analysis
-    #analyze.post( hotspot ) # uses others for analysis
+    analyze.post( hotspot ) # uses others for analysis
 
     # startup
+    sys.stdout.reconfigure(line_buffering=True)
     print("Start {} {}\n".format( __file__,
         datetime.datetime.fromtimestamp(pathlib.Path(__file__).stat().st_mtime).isoformat()
         )
@@ -103,6 +104,9 @@ try:
             if say_stats() and frame_ct > 10:
                 analyze.print_stats()
                 print("endstats[]")
+
+            animation = cleft.choose_animation( hotspot )
+            print("animation[{}]".format(animation))
 
             print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
 
