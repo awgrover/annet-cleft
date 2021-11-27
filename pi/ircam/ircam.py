@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
 try:
-    import sys,pathlib,datetime
-    import time
+    import sys,pathlib,datetime,time,os
+    ### Check for Pi
+    if os.path.exists('/sys/firmware/devicetree/base/model'):
+        with open('/sys/firmware/devicetree/base/model') as f:
+            _basemodel = f.readline()
+            if not 'Pi' in _basemodel:
+                sys.stderr.write("# Not a pi! {} from {}\n".format(_basemodel, '/sys/firmware/devicetree/base/model'))
+                exit(1)
+    else:
+        sys.stderr.write("# Not a pi! no {}\n".format('/sys/firmware/devicetree/base/model'))
+        exit(1)
     import busio
     import board
 
     import adafruit_amg88xx
     import adafruit_tca9548a
 
+    # our libs
     sys.path.append("./lib")
-    import cleft
     from every.every import Every
+    from every.every import Timer
     from exponential_smooth import ExponentialSmooth
 
+    import cleft
+    from arduino_port import ArduinoPort
+
+    # Constants etc
     WRITE_DATA = True # True to print pixels etc
     MIRRORED = False # mirror left-right of camera == as if facing camera
     INVERTED = True # mirror top-bottom of camera
@@ -29,6 +43,9 @@ try:
     IR_WIDTH = 8
     IR_HEIGHT = 8
     amg = adafruit_amg88xx.AMG88XX(mux)
+
+    arduino = ArduinoPort() # default search for likely port
+    arduino_warmed_up = Timer(60) # FIXME: wait for arduino to say "ready"
 
     def celsius(f):
         return (f-32) * 5/9
@@ -70,8 +87,7 @@ try:
         # data for processing is stereotyped:
         # dataname[int|float, ... ,] # note final comma for convenience
 
-        
-        ## check_for_command()
+        ## check_for_command() # none right now
 
         if say_size():
             print("xy[{},{},]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
@@ -116,6 +132,10 @@ try:
             if frame_ct > 10:
                 if animation != None:
                     print("animation[{},]".format(animation))
+                    if animation != None and animation != cleft.IDLE:
+                        # update arduino, even if still the same animation
+                        if arduino_warmed_up():
+                            arduino.write(str(animation)) # single character assumed
 
             print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
 
