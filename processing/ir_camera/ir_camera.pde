@@ -32,6 +32,24 @@ int firsthigh_bin_i = 0;
 int background_temp_i = 0;
 float background_temp = 0.0;
 
+class XY {
+  public int x, y;
+  XY() { 
+    this(-1, -1);
+  }
+  XY(int x, int y) { 
+    this.x=x; 
+    this.y=y;
+  }
+  void init() {
+    this.x=-1;
+    this.y=-1;
+  }
+  String dump() {
+    return String.format("%d,%d",this.x,this.y);
+  }
+}
+
 class TempLocation {
   // to stucture some data together
   public float temp;
@@ -46,11 +64,17 @@ class TempLocation {
     this.x=x;
     this.y=y;
   }
+
+  void init() {
+    temp=0;
+    this.i=-1;
+    this.x=-1;
+    this.y=-1;
+  }
+
   public void read_data(String line, String why) {
-    this.temp = 0;
-    this.i = -1;
-    this.x = -1;
-    this.y = -1;
+    this.init();
+
     //println(why + " " + line);
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
     tokens.nextToken(); // discard "blah["
@@ -65,6 +89,7 @@ class TempLocation {
       this.temp = 0; // the flag
     }
   }
+
   String dump() {
     return String.format("[%d]=%.2f @(%d,%d)", this.i, this.temp, this.x, this.y);
   }
@@ -72,6 +97,9 @@ class TempLocation {
 
 TempLocation low = new TempLocation();
 TempLocation high = new TempLocation();
+// hotspot data has a was & now, use now
+XY hotspot = new XY();
+int animation_number = -1;
 
 // reading arduino data state:
 boolean read_next_row = false;
@@ -148,6 +176,8 @@ void draw() {
   if ( new_data ) {
     draw_frame();
     draw_pixels();
+    hot_pixels(high);
+    hot_spot_quadrant();
     new_data = false;
   }
 
@@ -162,6 +192,29 @@ void draw() {
       last_mouse.set(mouseX, mouseY);
     }
   }
+}
+
+void hot_spot_quadrant() {
+  int box_width = tv_width / temp_cols;
+  int box_height = tv_height / temp_rows;
+  float box_x = box_width * hotspot.x; 
+  float box_y = box_height * hotspot.y;
+  
+  // "X"
+  stroke(0, 255, 255);
+  strokeWeight(2);
+  line(box_x, box_y, box_x+box_width, box_y+box_height);
+  line(box_x + box_width, box_y, box_x, box_y+box_height);
+  strokeWeight(1);
+  // Animation #
+  
+  fill(0, 190, 190);
+  textSize(box_height/4);
+  String to_draw = "" +animation_number;
+  int text_width = int(textWidth(to_draw));
+  int text_height = int(textAscent() + textDescent());
+  text(to_draw, box_x + 2, box_y + box_height - text_height);
+
 }
 
 void hot_pixels(TempLocation maximum) {
@@ -344,6 +397,7 @@ void consume_ircam_data(String command) {
       while (true) {
         String line = arduino_port.readLine();
         if (line != null) print(line);
+        else delay(100);
       }
     } else if (command.startsWith("xy[")) { // xy[cols, rows ]
       setup_pixel_data(command);
@@ -357,14 +411,18 @@ void consume_ircam_data(String command) {
       read_background(command);
     } else if (command.startsWith("mintemp[")) { // mintemp[bin_i,temp_v,x,y]
       low.read_data(command, "mintemp[");
-      println("mintemp: " + low.dump());
+      //println("mintemp: " + low.dump());
     } else if (command.startsWith("maxtemp[")) { // mintemp[bin_i,temp_v,x,y]
       high.read_data(command, "maxtemp[");
       println("maxtemp: " + high.dump());
+    } else if (command.startsWith("hotspot[")) { // [wasx,y,nowx,y]
+      read_hotspot(command);
+    } else if (command.startsWith("animation[")) { // [n]
+      read_animation(command);
     } else if (command.startsWith("endstats[]")) { // end of stats
       // .clear seems to hang us sigh.
       // if (arduino_port != null) arduino_port.clear();
-      println("QUE " + arduino_port.size());
+      //println("QUE " + arduino_port.size());
     }// data looks like [f, f,... \n ...\n ] for 8 lines of 8 data
     else if (
       (command.startsWith("[") || command.startsWith("C[")) 
@@ -495,6 +553,49 @@ int read_a_int(StringTokenizer tokens, String why) {
   }
   return 0;
 }
+
+void read_hotspot(String line) {
+  // [wasx,y,nowx,y]
+  hotspot.init();
+
+  //println(why + " " + line);
+  final String why = "hotspot";
+  StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
+  tokens.nextToken(); // discard "blah["
+  try {
+    // these are "quadrant" xy's: 0..2 x 0..2
+    int was_x = read_a_int(tokens, why+" was.x");
+    int was_y = read_a_int(tokens, why+" was.y");
+    int now_x = read_a_int(tokens, why+" now.x");
+    int now_y = read_a_int(tokens, why+" now.y");
+    // this isn't quite right, qx=0 -> 0,1,2. qx=1 -> 3,4. etc
+    hotspot.x = int(map(now_x, 0, 2, 0, 7));
+    hotspot.y = int(map(now_y, 0, 2, 0, 7));
+    println(String.format("hotspot %d,%d -> %d,%d = %s", was_x,was_y, now_x,now_y, hotspot.dump()));
+  }
+  catch (NumberFormatException  e) {
+    // message already printed by read_a_x()
+    hotspot.init(); // the flag
+  }
+}
+
+void read_animation(String line) {
+  // [wasx,y,nowx,y]
+  animation_number = -1;
+
+  //println(why + " " + line);
+  final String why = "animation";
+  StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
+  tokens.nextToken(); // discard "blah["
+  try {
+    animation_number = read_a_int(tokens, why);
+    println(String.format("animation %d", animation_number));
+  }
+  catch (NumberFormatException  e) {
+    // message already printed by read_a_x()
+  }
+}
+
 void read_histo(String line) {
   // histo[binct, ct,...]
   // cf read_histotemps()
@@ -502,7 +603,7 @@ void read_histo(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    println("histo :");
+    //println("histo :");
     t = tokens.nextToken(); // reads "histo["
     t = tokens.nextToken(); // binct
     //println("  binct '"+t+"'");
@@ -536,7 +637,7 @@ void read_histotemps(String line) {
   try {
     // from the xy[cols, rows ] line
     StringTokenizer tokens = new StringTokenizer(line, "[, \t\n\r\f");
-    println("histotemp :");
+    //println("histotemp :");
     t = tokens.nextToken(); // reads "histo["
     t = tokens.nextToken(); // binct
     //println("  binct '"+t+"'");
@@ -662,8 +763,8 @@ void draw_pixels() {
    max_t = max(max_t, 30.0);
    } */
   if (say_range.now()) { 
-    println("range " + low.temp + " " + high.temp + " color? " +pixel_is_color);
-    if (firsthigh_bin_i == 0) println("No firsthigh");
+    //println("range " + low.temp + " " + high.temp + " color? " +pixel_is_color);
+    //if (firsthigh_bin_i == 0) println("No firsthigh");
   }
 
   int box_width = tv_width / temp_cols;
@@ -739,8 +840,6 @@ void draw_pixels() {
     }
     //println();
   }
-
-  hot_pixels(high);
 }
 
 void background_pixel(int x_top_left, int y_top_left, 

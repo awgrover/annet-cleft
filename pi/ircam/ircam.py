@@ -60,6 +60,7 @@ try:
     smoothed_pixels = [[0] * IR_WIDTH for _ in range(IR_HEIGHT)]
     exp_smooth = 5
     frame_ct = 0
+    was_animation = None
         
     say_size = Every(3.0, True) # fire immediately
     ir_framerate = Every(0.500) # hmm, processing gets way behind at 0.1
@@ -101,12 +102,20 @@ try:
             analyze() # for "posts"
             frame_ct += 1
 
+            # wait at least 10 frames to let exponential smooths stabilize
             if say_stats() and frame_ct > 10:
                 analyze.print_stats()
                 print("endstats[]")
 
-            animation = cleft.choose_animation( hotspot )
-            print("animation[{}]".format(animation))
+            animation = cleft.choose_animation( hotspot, was_animation )
+            if animation == None:
+                print("animation None was {}".format(was_animation))
+            else:
+                was_animation = animation
+
+            if frame_ct > 10:
+                if animation != None:
+                    print("animation[{},]".format(animation))
 
             print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
 

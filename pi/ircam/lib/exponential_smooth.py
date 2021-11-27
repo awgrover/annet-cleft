@@ -11,7 +11,7 @@ class ExponentialSmooth(object):
 
   @property
   def value(self):
-    return int( self._smoothed)
+    return self._smoothed
 
   def reset(self, v):
     self._smoothed = v

@@ -1,6 +1,7 @@
 import sys
 from abc import ABC, abstractmethod
 from exponential_smooth import ExponentialSmooth
+from copy import copy
 
 class AnalyzerInterface:
     """Implement this in analyzers that are Analyze.add( some_analyzer )"""
@@ -243,7 +244,7 @@ class FirstHigh(AnalyzerInterface):
             fenced_i += 1
 
         if (not found):
-          print("no 0 buckets found by {}".format(fenced_i))
+          #print("no 0 buckets found by {}".format(fenced_i))
           return 0
 
         # find at_least_in_a_row below-fence in a row
@@ -305,14 +306,14 @@ class BackgroundTemp(AnalyzerInterface):
                 self.background_temp.reset( self.minmax.high.temp )
 
             # track the max, assuming it is background
-            else:
+            elif self.minmax.high.temp > 10: # ignore glitches
                 # we want to stay below firsthigh
                 # if we are 3 bins below it, or 3 above it
                 to_heat_island = self.firsthigh.temp - self.background_temp.value
                 #print("ISL @{} fh{} {} +-{}".format(self.background_temp.value, self.firsthigh.temp, to_heat_island, 3*self.histo.bucket_width))
                 if to_heat_island >= (-3*self.histo.bucket_width) and to_heat_island <= (3*self.histo.bucket_width): 
-                    #print("  reset to {}".format(self.firsthigh.temp - 2*self.histo.bucket_width))
-                    self.background_temp.reset( self.firsthigh.temp - 2*self.histo.bucket_width )
+                    print("  reset to {}".format(self.firsthigh.temp - 2*0.25))
+                    self.background_temp.reset( self.firsthigh.temp - 2*0.25)
                 else:
                     # track the max
                     self.background_temp.update( self.minmax.high.temp );
@@ -336,7 +337,7 @@ class HotSpot(AnalyzerInterface):
     def __init__(self, minmax, background):
         self.minmax = minmax
         self.background = background
-        self.was_seen = True
+        self.was_seen = False
 
         self.hotspot = TemperatureLocation(0,-1,-1,-1) # we'll track this over time
         self.was = XY(-1,-1)
@@ -359,25 +360,55 @@ class HotSpot(AnalyzerInterface):
         #           farthest
         # plus "empty" [-1,-1]
         # Our state is: was -> is, until we are told "seen" (then was=is)
-        print( "hotspot[{},{}, {},{}]".format(self.was.x, self.was.y, self.now.x, self.now.y) )
+        print( "hotspot[{},{}, {},{},]".format(self.was.x, self.was.y, self.now.x, self.now.y) )
 
     def post(self):
         """do the whole frame analysis"""
-        if self.background.firsthigh.temp > 0 and self.minmax.high.temp > self.background.firsthigh.temp:
-            #if not boredwithspot
-            self.hotspot = self.minmax.high
+        # ignore glitches
+        if self.background.firsthigh.temp > 10:
+
+            # if we have the nice pattern (detected the "gap"):
+            # background < firsthigh < max
+            # then use max
+            use_temp = None
+            if (
+                self.background.background_temp.value < self.background.firsthigh.temp
+                and self.background.firsthigh.temp <= self.minmax.high.temp
+                ):
+                use_temp = self.minmax.high
+
+            # Less certain is when we don't have a good "gap"
+            # in fact, probably not useful since background-tracking
+            # tends to be a bit less than max all the time...
+            elif (
+                self.background.background_temp.value < self.minmax.high.temp
+                and (self.minmax.high.temp - self.background.background_temp.value) > 0.5
+                and self.background.firsthigh.temp >= self.minmax.high.temp
+                ):
+                # use max, but maybe we want to realize that this is less certain...
+                use_temp = self.minmax.high
+
+            if use_temp:
+                #if not boredwithspot
+                self.hotspot = use_temp
 
 
-            # update was/now if the last was seen
-            if self.was_seen:
-                self.was_seen = False
-                self.was = self.now
+                # update was/now if the last was seen
+                if self.was_seen:
+                    self.was_seen = False
+                    self.was = copy(self.now)
 
-                # hystersis by doing 2 border 2 border 2 and counting border as the last quadrant
+                    # hystersis by doing 2 border 2 border 2 and counting border as the last quadrant
 
-                self.now.x = self._quadrant( self.hotspot.x )
-                self.now.y = self._quadrant( self.hotspot.y )
-                print("now ({},{}) from hotat [{},{}]".format(self.now.x,self.now.y, self.hotspot.x,self.hotspot.y))
+                    self.now.x = self._quadrant( self.hotspot.x )
+                    self.now.y = self._quadrant( self.hotspot.y )
+                    #print("animation now ({},{}) from hotat [{},{}]".format(self.now.x,self.now.y, self.hotspot.x,self.hotspot.y))
+
+            else:
+                # so, must not be anything in view
+                if self.was_seen:
+                    self.now.x = -1
+                    self.now.y = -1
 
     def seen(self):
         self.was_seen = True
@@ -401,45 +432,54 @@ WORN_POSTURE = JITTER+1
 LEFT_WAVE = WORN_POSTURE+1
 RIGHT_WAVE = LEFT_WAVE+1
 
-def choose_animation( hotspot ):
+def choose_animation( hotspot, was_animation ):
     # return an animation #
 
     # if we don't choose/send an aniimation, the arduino should assume IDLE
 
-    # still no-one
+    # no-one in view
     if hotspot.was == (-1,-1) and hotspot.now == (-1,-1):
+        hotspot.seen()
+        #print("animation case IDLE because was & now -1")
         return IDLE
 
-    # just left
+    # just exited view
     elif hotspot.now == (-1,-1):
         hotspot.seen()
+        #print("animation case RELAX because exited now -1")
         return RELAX
 
-    # approached to edge (front)
+    # approached to edge (back)
     elif hotspot.was == (-1,-1) and hotspot.now.y == 2:
         hotspot.seen()
+        #print("animation case REAR_UP because was -1, now.y==2")
         return REAR_UP
 
     # l|r|back -> center : jitter
     elif hotspot.was != (1,1) and hotspot.was.y != 0 and hotspot.now == (1,1):
         hotspot.seen()
+        #print("animation case JITTTER because was not center, now 1,1")
         return JITTER
 
     # center-front: worn posture
-    elif hotspot.now == (0,1):
+    elif hotspot.now == (1,0):
         hotspot.seen()
+        #print("animation case WORN because front 1,0")
         return WORN_POSTURE # with breathing
 
     # left/right : wave big, then small slow (caress)
-    elif hotspot.now.x == 1:
+    elif hotspot.now.x == 0:
         hotspot.seen()
+        #print("animation case LEFT because x=0")
         return LEFT_WAVE
 
     # left/right : wave big, then small slow (caress)
     elif hotspot.now.x == 2:
         hotspot.seen()
+        #print("animation case RIGHT because x=2")
         return RIGHT_WAVE
 
     else:
-        print("NOT CATEGORIZED")
+        #print( "animation NOT CATEGORIZED {},{}, {},{}".format(hotspot.was.x, hotspot.was.y, hotspot.now.x, hotspot.now.y) )
+        hotspot.seen()
         return None
