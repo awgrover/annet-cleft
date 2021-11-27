@@ -1,0 +1,69 @@
+#!/bin/bash
+# --- [start|stop|disable|enable] # status, or start, stop
+# --- install # install systemd service (redo is safe)
+# --- log # tail -f the log
+
+service=ircam.service
+
+if [ "$1" == '' ]; then
+    systemctl --user status $service
+
+elif [ "$1" == 'start' ]; then
+    systemctl --user start $service
+    
+elif [ "$1" == 'stop' ]; then
+    systemctl --user stop $service
+    
+elif [ "$1" == 'enable' ]; then
+    systemctl --user enable $service
+    
+elif [ "$1" == 'disable' ]; then
+    systemctl --user stop $service
+    systemctl --user disable $service
+    
+elif [ "$1" == 'log' ]; then
+    ( set -x; journalctl --user-unit $service -f )
+    journalctl --user-unit $service --disk-usage
+
+elif [ "$1" == 'install' ]; then
+    # enable user systemd services
+    if loginctl -a show-user pi | grep Linger | grep =no; then
+        loginctl enable-linger pi
+        loginctl -a show-user pi | grep Linger
+    fi
+
+    # need the config dir
+    user_config=~/.config/systemd/user
+    mkdir -p $user_config
+    echo $user_config
+    ls -la $user_config
+
+    cat <<'EOS' > $user_config/$service
+[Unit]
+Description=IRCam interpreter, talks to arduino
+
+[Install]
+WantedBy=default.target
+
+[Service]
+ExecStart=/home/pi/ircam/ircam.py
+WorkingDirectory=/home/pi/ircam
+Restart=always
+# i've seen i2c not be released
+RestartSec=10
+EOS
+
+    # load it
+    systemctl --user daemon-reload
+    # boot time
+    systemctl --user enable $service
+    # now
+    systemctl --user start $service
+    systemctl --user status $service
+
+else
+    echo $0
+    awk 'FNR==2,/^$/ {print}' $0 > /dev/stderr
+    exit 1
+
+fi

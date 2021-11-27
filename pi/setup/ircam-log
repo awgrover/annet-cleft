@@ -1,0 +1,3 @@
+# this is "follow" end of log
+# -e (instead of -f) to see the end of the log
+journalctl --user-unit ircam.service -f
