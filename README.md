@@ -100,3 +100,5 @@ pip3 install --upgrade RPi.GPIO adafruit-blinka
 # pin version?
 # 1st is ircam, second is mux
 pip3 install adafruit-circuitpython-amg88xx adafruit-circuitpython-tca9548a
+# enable user systemd service
+scp -p ./pi/setup/* cleftpi.local:

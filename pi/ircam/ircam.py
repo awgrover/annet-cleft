@@ -134,7 +134,7 @@ try:
                     print("animation[{},]".format(animation))
                     if animation != None and animation != cleft.IDLE:
                         # update arduino, even if still the same animation
-                        if arduino_warmed_up():
+                        if not arduino_warmed_up.running: # i.e. expired
                             arduino.write(str(animation)) # single character assumed
 
             print("{:0.1f} msec Read & Analyze".format( (time.monotonic() - start_read) * 1000))
