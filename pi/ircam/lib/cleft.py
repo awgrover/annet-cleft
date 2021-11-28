@@ -424,13 +424,15 @@ class HotSpot(AnalyzerInterface):
         else:
             return 2
 
-IDLE = 3
-RELAX = IDLE+1
-REAR_UP = RELAX+1
-JITTER = REAR_UP+1
-WORN_POSTURE = JITTER+1
-LEFT_WAVE = WORN_POSTURE+1
-RIGHT_WAVE = LEFT_WAVE+1
+# see arduino/cleft/commands.h and cleft.ino Animation* Animation::animations[] =...
+# i.e. you'll need an animation in that array to correspond
+IDLE = 'a'
+RELAX = chr(ord(IDLE)+1)
+REAR_UP = chr(ord(RELAX)+1)
+JITTER = chr(ord(REAR_UP)+1)
+WORN_POSTURE = chr(ord(JITTER)+1)
+LEFT_WAVE = chr(ord(WORN_POSTURE)+1)
+RIGHT_WAVE = chr(ord(LEFT_WAVE)+1)
 
 def choose_animation( hotspot, was_animation ):
     # return an animation #

@@ -108,7 +108,7 @@ static boolean allow_random = true; // enable idle random animations
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
 #include "AnimationTest.h"
-#include "AnimationWornPosture.h"
+#include "AnimationInteractive.h"
 
 #include "Commands.h"
 
@@ -143,6 +143,16 @@ AccelStepperShift* stepper_shift = new AccelStepperShift(
   FAKE_LIMIT_PIN_X);
 //ArrayAnimation* animation = new ArrayAnimation(MOTOR_CT); // later
 
+AnimationWaveCute cute_wave_left( // the cute wave. sidedness is set in setup
+  stepper_shift,
+  5, // segments
+  (AccelStepperShift::MAX_MOTION  / 2 ), // max amplitude
+  0.2, // frequency
+  1 // cycles
+);
+
+AnimationWaveCute cute_wave_right = cute_wave_left; // copy instance vars. sidedness is set in setup
+
 // this list is only for serial commands (see Commands), to pick an animation.
 Animation* Animation::animations[] = {
   new AnimationWave1( // '1' moving sine wave '!'
@@ -152,28 +162,32 @@ Animation* Animation::animations[] = {
     0.1, // frequency
     1 // cycles
   ),
-  new AnimationWave2( // the failed cute wave "@"
+  new AnimationWave2( // the failed cute wave "2"
     stepper_shift,
     5, // segments
     AccelStepperShift::MAX_MOTION / 2, // max amplitude
     0.08, // frequency
     1 // cycles
   ),
-  new AnimationWaveCute( // the cute wave "#"
-    stepper_shift,
-    5, // segments
-    (AccelStepperShift::MAX_MOTION  / 2 ), // max amplitude
-    0.2, // frequency
-    1 // cycles
-  ),
+
+  &cute_wave_left, // '3'
+
   NULL, NULL,
   new AnimationSequenceTests(stepper_shift), // '6' ([5])
   new AnimationIntegrationTests(stepper_shift), // '7'
   new AnimationMotorTests(stepper_shift), // '8'
   new AnimationFast(stepper_shift), // '9'
-  
+
   // 'a'==[9] .. 'u' == [29]. intended for interactive animations decided by Pi
-  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/), // 'a'
+  // MUST CORRESPOND:
+  // see lib/cleft.py choose_animation() and the constants above it
+  new AnimationNoop(stepper_shift), // immediately goes to IDLE, 'a'
+  new AnimationHome(stepper_shift), // aka RELAX 'b'
+  NULL, // REAR_UP 'c'
+  new AnimationJitter(stepper_shift, 5/*cm*/), // JITTER 'd'
+  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/), // WORN_POSTURE 'e'
+  &cute_wave_left, // LEFT_WAVE 'f'
+  &cute_wave_right, // RIGHT_WAVE 'g'
 };
 const int Animation::animation_ct = array_size(animations);
 // 1st animation
@@ -224,6 +238,9 @@ void setup() {
 
   // allow other spi users
   SPI.begin();
+
+  cute_wave_right.right();
+  cute_wave_left.left();
 
   // Each main object
   last_free = freeMemory();

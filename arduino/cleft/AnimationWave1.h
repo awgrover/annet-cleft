@@ -1,6 +1,6 @@
 /* animations using the Animation protocol
- *  
- */
+
+*/
 
 #include "Animation.h"
 
@@ -356,6 +356,7 @@ class AnimationWaveCute  : public Animation {
     const float frequency; // in cycles/sec
     const int segments;
     const int total_cycles; // how many to do
+    bool left_side = true; // which side we are animating, cf left() right() to change
 
     int cycles = 0; // total cycles
 
@@ -366,6 +367,19 @@ class AnimationWaveCute  : public Animation {
         segments( segments ), // works for odd number of segments
         total_cycles(total_cycles)
     {
+    }
+
+    // change/pick which side waves:
+    void left() {
+      left_side = true;
+    }
+    void right() {
+      left_side = false;
+    }
+
+    boolean relevant_segment(int motor_i) {
+      // is this motor in the segments that we want to move?
+      return left_side ? (motor_i < segments) : (motor_i >= all_motors->motor_ct - segments);
     }
 
     void restart() {
@@ -386,10 +400,10 @@ class AnimationWaveCute  : public Animation {
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
         // but only "move" those of interest
-        if (i < segments) all_motors->motors[i]->moveTo( amplitude_for_segment(i, HIGH) );
+        if ( relevant_segment(i) ) all_motors->motors[i]->moveTo( amplitude_for_segment(i, HIGH) );
       }
 
-      Serial << F("  Segments ") << segments << endl
+      Serial << F("  Segments ") << segments << (left_side ? " left " : " right ") << endl
              << F("  Amplitude steps ") << amplitude << endl
              << F("  Cycle length secs ") << cycle_length << endl
              << F("  Distance ") << distance << endl
@@ -445,25 +459,23 @@ class AnimationWaveCute  : public Animation {
 
       // wait till we hit min/max on [0], reverse everybody (or note that we are done)
       // it would be nice if we just got signalled that the motor hit its target...
-      int leader = 0;
+      int leader = left_side ? 0 : all_motors->motor_ct - 1;
 
       // only consider changes if we moved this time
       if ( all_motors->motors[leader]->do_step ) {
         const boolean direction = all_motors->motors[leader]->direction();
-        const int min_max_amp = amplitude_for_segment(leader, direction);
-        const long pos = all_motors->motors[leader]->currentPosition();
-        const boolean hit_min_max = direction ? pos >= min_max_amp : pos <= min_max_amp;
+        const boolean hit_min_max = all_motors->motors[leader]->distanceToGo() == 0;
         //Serial << F("  dir ") << direction << F(" pos ") << pos
-        //       << F(" minmax ") << min_max_amp << F(" hit? ") << hit_min_max
         //       << endl;
 
         if ( hit_min_max ) {
           // so reverse (all participants)
-          for (int i = 0; i < segments; i++) {
+          for (int i = 0; i < all_motors->motor_ct; i++) {
 
-            all_motors->motors[i]->moveTo( amplitude_for_segment(i, ! direction) );
-
-            Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[leader]->currentPosition() > 0 ? -1 : 1) << endl;
+            if ( relevant_segment(i) ) {
+              all_motors->motors[i]->moveTo( amplitude_for_segment(i, ! direction) );
+              Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[leader]->currentPosition() > 0 ? -1 : 1) << endl;
+            }
           }
 
           // only need to count cycles at motor[max]
@@ -473,12 +485,12 @@ class AnimationWaveCute  : public Animation {
           if (cycles >= (2 * total_cycles) + 1) {
             state = Stopping;
             Serial << F("AW stopping") << millis() << endl;
-            for (int ii = 0; ii < segments; ii++) {
-              mirror_moveTo(ii, 0 );
+            for (int ii = 0; ii < all_motors->motor_ct; ii++) {
+              // could test, but just do all: if ( relevant_segment(ii) ) {
+              all_motors->motors[ii]->moveTo( 0 );
             }
             return;
           }
-
         }
       }
 
@@ -490,10 +502,11 @@ class AnimationWaveCute  : public Animation {
       // wait till all hit 0
       // we don't look for do_step, because when we get to 0, there will be no do_step
       // because we are pre-change...
-      static Every say_pos(100);
-      for (int i = 0; i < segments; i++) {
+      //static Every say_pos(100);
+      for (int i = 0; i < all_motors->motor_ct; i++) {
+        // could limit to relevant, but do all: if ( relevant_segment(i) ) {
         //if (say_pos()) Serial << F("stopping@ ") << i << F(" ") << all_motors->motors[ i ]->currentPosition() << endl;
-        if ( abs(all_motors->motors[ i ]->currentPosition()) != 0 ) {
+        if ( all_motors->motors[ i ]->distanceToGo() != 0 ) {
           return;
         }
       }
@@ -506,7 +519,8 @@ class AnimationWaveCute  : public Animation {
     int amplitude_for_segment(int motor_i, boolean top) {
       // we oscillate around amp/2
       // full amplitude for [0], reducing to 10% for nth
-      float fraction = (segments - motor_i) / (float) segments;
+      int denom = left_side ? (segments - motor_i) : (all_motors->motor_ct - motor_i);
+      float fraction = denom / (float) segments;
       int max_amp = amplitude * fraction;
       return top ? max_amp : (fraction * (amplitude / 2));
     }
