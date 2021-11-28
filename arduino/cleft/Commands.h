@@ -25,13 +25,12 @@ class Commands : public BeginRun {
 
         // reserve upper-case for other systems
 
-        switch (command) {
-          case '?': // are you there?
-            Serial << F("<S") << endl; // yes
-            break;
+        // 1..9 and a..u for animation indexes ( 1=[0], u=[29] )
 
-          case 'q': // tell positions
-            Serial << F("Homing") << endl;
+        switch (command) {
+           case '?': // HELO and tell positions
+            Serial << F("<S") << endl; // yes
+            Serial << F("Positions") << endl;
             Animation::current_animation->state = Animation::Off;
             for (int i = 0; i < all_motors->motor_ct; i++) {
               Serial << F("<P ") << i << F(" ") << all_motors->motors[i]->currentPosition() << endl;
@@ -85,17 +84,25 @@ class Commands : public BeginRun {
 
 
           default:
-            // 1..9A..Z: run an animation
-            // single character commands are easier, so one char for 1..36
+            // 1..9a..u: run an animation
+            // single character commands are easier, so one char for 1..29
             // NB: 1->[0] because 1=="1st" for humans.
-            if ( (command >= '1' && command <= '9') || (command >= 'A' && command <= 'F') ) {
+            if ( (command >= '1' && command <= '9') || (command >= 'a' && command <= 'u') ) {
               allow_random = true;
 
-              int animation_i = command - (command <= '9' ? '1' : 'A');
+              int animation_i = command - (command <= '9' ? '1' : 'a');
               Serial << F("restart animation ") << (animation_i + 1 ) << endl;
               if (animation_i < Animation::animation_ct && Animation::animations[animation_i] ) {
+                Animation *next_animation = Animation::animations[animation_i];
+                if (next_animation == Animation::current_animation) { // pointer ==, identity
+                  if ( Animation::current_animation->is_running() ) {
+                    // same animation, and it is running, so ignore
+                    Serial << F(" same animation, ignore") << endl;
+                    break;
+                  }
+                }
                 Animation::current_animation->state = Animation::Off;
-                Animation::current_animation = Animation::animations[animation_i];
+                Animation::current_animation = next_animation;
                 Animation::current_animation->state = Animation::Restart;
                 Serial << F("  animation is ") << ((long) Animation::current_animation)
                        << F(" @ ") << Animation::current_animation->state

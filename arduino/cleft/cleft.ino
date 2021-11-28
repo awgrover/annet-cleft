@@ -172,8 +172,8 @@ Animation* Animation::animations[] = {
   new AnimationMotorTests(stepper_shift), // '8'
   new AnimationFast(stepper_shift), // '9'
   
-  // 'A'==[9] .. 'Z' == [35]. intended for interactive animations decided by Pi
-  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/),
+  // 'a'==[9] .. 'u' == [29]. intended for interactive animations decided by Pi
+  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/), // 'a'
 };
 const int Animation::animation_ct = array_size(animations);
 // 1st animation
