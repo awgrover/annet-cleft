@@ -68,12 +68,12 @@ class Animation : public BeginRun {
     }
 
     // state functions, override as needed
-    void restart() {} // must provide
+    virtual void restart() = 0; // must provide
     virtual void startup() {}
     virtual void running() {}
     virtual void stopping() {}
 
-    int meters_to_steps(float m) {
+    static int meters_to_steps(const float m) {
       return AccelStepperShift::STEPS_METER * m;
     }
     

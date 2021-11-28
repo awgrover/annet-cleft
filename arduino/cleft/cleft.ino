@@ -185,7 +185,7 @@ Animation* Animation::animations[] = {
   new AnimationHome(stepper_shift), // aka RELAX 'b'
   NULL, // REAR_UP 'c'
   new AnimationJitter(stepper_shift, 5/*cm*/), // JITTER 'd'
-  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/), // WORN_POSTURE 'e'
+  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/, 1000 /*msec*/, 2 /*cm*/), // WORN_POSTURE 'e'
   &cute_wave_left, // LEFT_WAVE 'f'
   &cute_wave_right, // RIGHT_WAVE 'g'
 };
