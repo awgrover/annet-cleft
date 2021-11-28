@@ -22,21 +22,23 @@
   In Arduino-IDE, set the Preferences:Compiler Warnings to at lease "more". Instance variable
   initiatlization order is important. We should be warning free.
 
-  As of July 2021, the design is:
+  As of Nov 2021 the design is:
     one arduino Zero equivalent (48MHz): adafruit Metro M0 Express
-    15 motors, with TB6600 controllers, and limit switches
-    a chain of shift registers driving the controllers (SPI)
-    a chain of (in) shift-registers to read the limit switches (SPI at same time)
-    3 IR cameras (I2C)
-    Several LED indicators
-    AccelStepper to run the motors (but capturing as bit-vector for SPI)
+      15 motors, with TB6600 controllers, and limit switches
+      a chain of shift registers driving the controllers (SPI)
+      a chain of (in) shift-registers to read the limit switches (SPI at same time)
+      Several LED indicators
+      AccelStepper to run the motors (but capturing as bit-vector for SPI)
+    one Pi Zero
+      1 IR cameras (I2C)
+      python code to analyze IR camera and decide on animation
     Lots of wiring & connectors
     Not done yet:
     An animation framework based on key-frames and transition-functions.
-    An interaction module that interprets the cameras and decides on animation sequences.
-
 
     Wiring
+      Arduino USB to Pi USB (using serial mode, and powering arduino)
+      Pi : i2c pins -> i2c booster -> 3' wire -> i2c Mux -> IR Camera
       shift registers (in/out), latch-out, latch-in, stepper-enable, : see AccelStepperShift.h
       LED-Bar, end of (out) shift-register chain
         bit   assignment                          Desc
@@ -106,6 +108,7 @@ static boolean allow_random = true; // enable idle random animations
 // #include "ArrayAnimation.h"
 #include "AnimationWave1.h"
 #include "AnimationTest.h"
+#include "AnimationWornPosture.h"
 
 #include "Commands.h"
 
@@ -142,7 +145,7 @@ AccelStepperShift* stepper_shift = new AccelStepperShift(
 
 // this list is only for serial commands (see Commands), to pick an animation.
 Animation* Animation::animations[] = {
-  new AnimationWave1( // moving sine wave '!'
+  new AnimationWave1( // '1' moving sine wave '!'
     stepper_shift,
     AccelStepperShift::MAX_MOTION / 2, // amplitude meters
     0.8, // wavelength fraction that fits in 1/2 of cleft
@@ -164,10 +167,13 @@ Animation* Animation::animations[] = {
     1 // cycles
   ),
   NULL, NULL,
-  new AnimationSequenceTests(stepper_shift),
-  new AnimationIntegrationTests(stepper_shift), // 7
-  new AnimationMotorTests(stepper_shift), // 8
-  new AnimationFast(stepper_shift), // 9
+  new AnimationSequenceTests(stepper_shift), // '6' ([5])
+  new AnimationIntegrationTests(stepper_shift), // '7'
+  new AnimationMotorTests(stepper_shift), // '8'
+  new AnimationFast(stepper_shift), // '9'
+  
+  // 'A'==[9] .. 'Z' == [35]. intended for interactive animations decided by Pi
+  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/),
 };
 const int Animation::animation_ct = array_size(animations);
 // 1st animation
