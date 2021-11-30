@@ -197,18 +197,34 @@ class AnimationJitter  : public Animation {
     */
 
   public:
-    const float amplitude; // in steps
+    const float original_amplitude;
+    float amplitude = 0; // in steps, decays
     int motor_i; // current motor
+    static constexpr float Decay = 0.1; // how much to decay each time
+    static constexpr int Moot =  meters_to_steps(0.005); // no point if amp < this
+    const float decay; // abs amount to decay
+    Every *decay_now; // when to do each decay
 
-    AnimationJitter(AccelStepperShift* all_motors, float amplitude_meters)
+    AnimationJitter(AccelStepperShift* all_motors, float amplitude_meters, int duration)
       : Animation(all_motors),
-        amplitude(meters_to_steps(amplitude_meters)),
-        motor_i(0)
+        original_amplitude(meters_to_steps(amplitude_meters)),
+        amplitude(original_amplitude),
+        motor_i(0),
+        decay( (amplitude - Moot) * Decay ) // will be only approximate
     {
+      // +1 because the last step is probably moot
+      decay_now = new Every( int(duration / (1 + 1 / Decay)) );
     }
 
     void restart() {
-      Serial << F("jitter anim amplitude ") << amplitude << endl;
+      amplitude = original_amplitude;
+
+      Serial << F("jitter anim amplitude ") << amplitude 
+      << F(" at ") << millis() 
+      << F(" Moot ") << Moot
+      << F(" decay ") << decay
+      << endl;
+      
       int speed = 200 * 8 * 2; // 2 revolutions/sec
       for (int i = 0; i < all_motors->motor_ct; i++) {
         all_motors->motors[i]->setMaxSpeed(speed);
@@ -235,11 +251,44 @@ class AnimationJitter  : public Animation {
     }
 
     void running() {
-      // stay running
+      // eventually stops
+
+
       // as a motor finishes, pick a new one
       if ( all_motors->motors[ motor_i ]->distanceToGo() == 0 ) {
-        motor_i = random( all_motors->motor_ct );
-        all_motors->motors[motor_i]->moveTo( jitter(motor_i) );
+
+        if ( (*decay_now)() ) {
+          amplitude -= decay;
+          Serial << F("decay ") << decay << F(" to amp ") << amplitude << endl;
+
+          // decrease current posture toward 0
+
+          for (int i = 0; i < all_motors->motor_ct; i++) {
+            int position = all_motors->motors[i]->currentPosition();
+            int actual_decay = decay;
+            if (position > decay ) {
+              if (position < decay) actual_decay = position; // min
+              Serial << F("dec posture ") << i << F(" by ") << (-actual_decay) << endl;
+              all_motors->motors[i]->move( - actual_decay );
+            }
+            else if (position < decay ) {
+              if (position > -decay) actual_decay = -position; // min
+              Serial << F("dec posture ") << i << F(" by ") << (actual_decay) << endl;
+              all_motors->motors[i]->move( actual_decay );
+            }
+          }
+
+          if ( amplitude < Moot ) {
+            Serial << F("DECAYED! ") << millis() << endl;
+            state = Stopping;
+          }
+        }
+
+        else {
+          // jitter one
+          motor_i = random( all_motors->motor_ct );
+          all_motors->motors[motor_i]->moveTo( jitter(motor_i) );
+        }
       }
 
     }

@@ -79,7 +79,7 @@ class Animation : public BeginRun {
     virtual void running() {}
     virtual void stopping() {}
 
-    static int meters_to_steps(const float m) {
+    static constexpr int meters_to_steps(const float m) {
       return AccelStepperShift::STEPS_METER * m;
     }
     

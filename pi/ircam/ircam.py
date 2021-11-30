@@ -77,17 +77,63 @@ try:
     smoothed_pixels = [[0] * IR_WIDTH for _ in range(IR_HEIGHT)]
     exp_smooth = 5
     frame_ct = 0
+    warmed_up = Timer(2*60) # let it adjust before trying to run an animation
+    warmed_up.start()
+
+    check_flags = Every(3.0)
+
+    # whether we should tell the arduino which animation to run (if file exists)
+    send_animation_file = "/home/pi/send_animation.flag"
+    send_animation = False 
     was_animation = None
         
     say_size = Every(3.0, True) # fire immediately
     ir_framerate = Every(0.500) # hmm, processing gets way behind at 0.1
     say_stats = Every(1.0);
 
+    heartbeat_running = (1.0,0.1)
+    heartbeat_interactive = (1.0,1.0)
+    heartbeat_interacting = (0.2,1.0,0.2,0.1)
+    heartbeat = Every( *heartbeat_running )
+
     while True:
         # data for processing is stereotyped:
         # dataname[int|float, ... ,] # note final comma for convenience
 
         ## check_for_command() # none right now
+
+        if heartbeat():
+            polarity = heartbeat.i % 2 # 0=off, 1=on
+            cmd = "echo {} | sudo tee /sys/class/leds/led0/brightness".format(polarity)
+            # print(cmd)
+            # this really slows us down
+            os.system(cmd)
+
+        warmed_up()
+        if False and warmed_up() and send_animation:
+            heartbeat.interval = heartbeat_interacting
+            heartbeat.start
+
+        if check_flags():
+            file_exists = os.path.exists(send_animation_file)
+            #print("flag? {} {}".format(send_animation, send_animation_file))
+            want = None
+            send_animation = False
+
+            if not file_exists:
+                want = heartbeat_running
+                #print("running!")
+            elif not warmed_up.running:
+                send_animation = True
+                want = heartbeat_interacting
+                #print("interacting!")
+            else:
+                want = heartbeat_interactive
+                #print("interactive!")
+            if want != None and want != heartbeat.interval:
+                #print("update")
+                heartbeat.interval = want
+                heartbeat.start
 
         if say_size():
             print("xy[{},{},]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
@@ -129,7 +175,7 @@ try:
             else:
                 was_animation = animation
 
-            if frame_ct > 10:
+            if send_animation:
                 if animation != None:
                     print("animation[{},]".format(animation))
                     if animation != None and animation != cleft.IDLE:
