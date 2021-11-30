@@ -83,6 +83,14 @@ Print &operator <<(Print &obj, const __FlashStringHelper* arg) {
 
 // up here so available to the #includes, which is ugly
 
+// print position of each motor on each step if true
+// If you see no steps, maybe you need the debug-jumper to fake limit switches?
+// 0 = no step output
+// 1 = step output on 100msec
+// 2 = step output every step
+// > 100 means print every n-msec
+int DEBUGPOSPERSTEP = 0; // want changeable so processing can ask for steps
+
 constexpr int MOTOR_CT = 15; // during startup, will auto detect and ignore motors whose limit is not triggered
 constexpr boolean NO_EXTRA_FRAMES = false; // "true" turns off the led-indicator frame (extra shift-register).
 
@@ -184,8 +192,12 @@ Animation* Animation::animations[] = {
   new AnimationNoop(stepper_shift), // immediately goes to IDLE, 'a'
   new AnimationHome(stepper_shift), // aka RELAX 'b'
   NULL, // REAR_UP 'c'
-  new AnimationJitter(stepper_shift, 5/*cm*/), // JITTER 'd'
-  new AnimationWornPosture(stepper_shift, 10 /*cm*/, 3000 /*msec*/, 1000 /*msec*/, 2 /*cm*/), // WORN_POSTURE 'e'
+  new AnimationJitter(stepper_shift, 0.02/*cm*/), // JITTER 'd'
+  new AnimationWornPosture( // WORN_POSTURE 'e'
+    stepper_shift,
+    0.10 /*m*/, 3000 /*msec*/, // initial posture
+    0.02 /*m*/, 2000, 1000, 1000 /*msec*/ // breath, in,out,pause
+  ),
   &cute_wave_left, // LEFT_WAVE 'f'
   &cute_wave_right, // RIGHT_WAVE 'g'
 };
@@ -193,6 +205,7 @@ const int Animation::animation_ct = array_size(animations);
 // 1st animation
 Animation* Animation::current_animation = Animation::animations[2]; // cute first
 
+// SYSTEMS
 // We automatically call .begin() in setup, and .run() in loop, for each thing in systems[]
 // When testing/developing, you can set these to NULL to skip using them
 BeginRun* systems[] = {
@@ -213,6 +226,7 @@ void setup() {
   digitalWrite(LED_BUILTIN, HIGH);
 
   serial_begin(115200); // cf. integrated usb vs not-integrated
+  id();
 
   // Integrated USB chips have trouble uploading sometimes
   // (especially if you corrupt memory, or go into a tight loop)
@@ -254,11 +268,12 @@ void setup() {
   }
 
   // other startup behavior
+  if (! DEBUGPOSPERSTEP) Serial << F("NO STEP OUTPUT 'DEBUGPOSPERSTEP'") << endl;
 
   // FIXME? shouldn't I have currentanimation.begin() here?
 
+  // Self callibrate to zero
   if (stepper_shift) stepper_shift->goto_limit(); // null-op if jumper is ignore-limits
-  //Serial << F(" GOTO LIMIT IS OFF") << endl;
 
   if (DEBUGMOVETEST) {
     Animation::current_animation->state = Animation::Off;
@@ -266,6 +281,10 @@ void setup() {
 
   // and
   Serial << F("End setup() @ ") << millis() << F(" Free: ") << freeMemory() << endl;
+}
+
+void id() {
+  Serial << F(__FILE__) << F(" ") << F(__DATE__) << F(" ") << F(__TIME__) << endl;
 }
 
 void serial_begin(unsigned long baud) {
@@ -303,8 +322,9 @@ void loop() {
 
   static Every debug(1000);
   if (debug()) {
-    Serial << F("allow r? ") << allow_random
+    Serial << F("allow rand? ") << allow_random
            << F(" is running? ") << Animation::current_animation->is_running()
+           << F(" state " ) << Animation::current_animation->state
            << endl;
   }
 
@@ -331,7 +351,7 @@ void loop() {
 
     Animation::current_animation = Animation::animations[which];
     Animation::current_animation->state = Animation::Restart;
-    Serial << F("  animation is ") << which << F(" ") << ((long) Animation::current_animation)
+    Serial << F("  RAND animation is ") << which << F(" ") << ((long) Animation::current_animation)
            << F(" @ ") << Animation::current_animation->state
            << endl;
   }

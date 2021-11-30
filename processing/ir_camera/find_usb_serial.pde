@@ -45,7 +45,7 @@ INonblockingReadLine connectUSBSerial(int baud) {
       flipDotPorts[i].contains("/dev/ttyUSB") // "/dev/ACM") // linux pi-serial
       || flipDotPorts[i].contains("/dev/ttyACM") // linux arduino
       || flipDotPorts[i].contains("cu.usbmodem") // mac
-      || flipDotPorts[i].contains("tty. usbmodem") // windows?
+      || flipDotPorts[i].contains("tty.usbmodem") // windows?
       ) { 
       arduinoPortName = flipDotPorts[i];
     }

@@ -130,6 +130,7 @@ void connect_to_arduino() {
       arduino_port.bufferUntil(10); // lf
       delay(500);
       arduino_port.write("?"); // evoke helo
+      arduino_port.write("<"); // print steps
       arduino_port.write("q"); // synch
     }
   }
@@ -137,7 +138,6 @@ void connect_to_arduino() {
 
 void serialEvent(Serial port) {
   String command = port.readString();
-  if (! command.startsWith("*") ) print("* " + command);
 
   if (command.startsWith("<P ")) {
     // <P idx pos
@@ -168,6 +168,8 @@ void serialEvent(Serial port) {
     catch (Exception  e) {
       println("FAIL bad something from arduino " + e.toString());
     }
+  } else if (! command.startsWith("*") ) {
+    print("* " + command);
   }
 }
 
@@ -193,9 +195,18 @@ public void mouseClicked(MouseEvent evt) {
 void keyPressed() {
   if (key != CODED) {
     // ascii's 1..9,a..e -> 0..14 
-    if (key >= '0' && key <= '9') {
-      segment_i = int(key) - int('1');
-      println("select " + segment_i);
+    if (key >= '0' && key <= '9' || key >= 'a' && key <= 'u') {
+      println("start " + key);
+      if (arduino_port != null) arduino_port.write( key );
+      /*
+      if ( key >= 'a' ) {
+       segment_i = int(key) - int('a') + 10;
+       }
+       else {
+       segment_i = int(key) - int('1');
+       }
+       println("select " + segment_i);
+       */
     } else if (key >= 'a' && key <= 'f') {
       segment_i = int(key) - int('a') + 10 - 1; // a is 10th which is [9]
       println("select " + segment_i);

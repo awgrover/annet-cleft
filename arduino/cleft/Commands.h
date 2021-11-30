@@ -28,7 +28,8 @@ class Commands : public BeginRun {
         // 1..9 and a..u for animation indexes ( 1=[0], u=[29] )
 
         switch (command) {
-           case '?': // HELO and tell positions
+          case '?': // HELO and tell positions
+            id();
             Serial << F("<S") << endl; // yes
             Serial << F("Positions") << endl;
             Animation::current_animation->state = Animation::Off;
@@ -62,12 +63,22 @@ class Commands : public BeginRun {
             Animation::current_animation->state = Animation::Off;
             break;
 
-          case 'u': // stop animation, goto up
+          case 'v': // stop animation, goto up
             Serial << F("Upping") << endl;
             Animation::current_animation->state = Animation::Off;
             for (int i = 0; i < all_motors->motor_ct; i++) {
               all_motors->motors[i]->moveTo( 0.5f * AccelStepperShift::STEPS_METER );
             }
+            break;
+
+          case '<': // turn on step printing for visualization
+            Serial << F("PERSTEP on") << endl;
+            DEBUGPOSPERSTEP = 2;
+            break;
+
+          case '>': // turn off step printing
+            Serial << F("PERSTEP off") << endl;
+            DEBUGPOSPERSTEP = 0;
             break;
 
           case '+': // up 2 steps
@@ -90,7 +101,7 @@ class Commands : public BeginRun {
             if ( (command >= '1' && command <= '9') || (command >= 'a' && command <= 'u') ) {
               allow_random = true;
 
-              int animation_i = command - (command <= '9' ? '1' : 'a');
+              int animation_i = command - (command <= '9' ? '1' : 'a' - 9);
               Serial << F("restart animation ") << (animation_i + 1 ) << endl;
               if (animation_i < Animation::animation_ct && Animation::animations[animation_i] ) {
                 Animation *next_animation = Animation::animations[animation_i];

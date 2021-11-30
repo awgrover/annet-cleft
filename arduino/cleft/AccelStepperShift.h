@@ -23,20 +23,15 @@
 // probably too noisy when running a real pattern
 #define DEBUGDONERUN 1
 
+
 // the COUNT of motors to debug, stops after that
 //  undef or -1 is don't,
-//#define DEBUGBITVECTOR 1
+//#define DEBUGBITVECTOR 0
 // 1 to print the bit-vector every time
 // 2 to print on "blink"
 // 3 to print limit-switch-bit-vector on shift-out
 // 4 to print all bit-vectors( step, dir, limit)
 #define DEBUGLOGBITVECTOR 0
-// print position of each motor on each step if true
-// If you see no steps, maybe you need the debug-jumper to fake limit switches?
-// 0 = no step output
-// 1 = step output on 100msec
-// 2 = step output every step
-#define DEBUGPOSPERSTEP 0
 // stop run()'ing after this number of steps, 0 means don't stop
 //#define DEBUGSTOPAFTER 2
 // print calcalation for frame[i] = value & mask
@@ -54,9 +49,6 @@
 #define DEBUGLOGBITVECTOR 0
 #endif
 
-#ifndef DEBUGPOSPERSTEP
-#define DEBUGPOSPERSTEP 0
-#endif
 #ifndef DEBUGSTOPAFTER
 #define DEBUGSTOPAFTER 0
 #endif
@@ -486,7 +478,7 @@ class AccelStepperShift : public BeginRun {
 
       static int step_count = 0; // for debug, see DEBUGSTOPAFTER
 
-      static Every say_pos(100);
+      static Every say_pos(DEBUGPOSPERSTEP == 2 ? 100 : DEBUGPOSPERSTEP);
       boolean say = say_pos();
       // if (say) Serial << F("  running @ ") << millis() << F(" ") << endl;
 
@@ -505,7 +497,7 @@ class AccelStepperShift : public BeginRun {
         // Which means we will not see run()==true for the last step. thus do_step() instead:
         if ( motors[i]->run() || motors[i]->do_step ) {
           done = false;
-          if (say && DEBUGPOSPERSTEP == 1) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
+          if (say && (DEBUGPOSPERSTEP == 1 || DEBUGPOSPERSTEP >= 100)) Serial << F("<P ") << i << F(" ") << motors[i]->currentPosition() << F(" ") << millis() << endl;
         }
         else {
           // if (!all_done) Serial << F("  done ") << i << F(" to ") << motors[i]->currentPosition() << endl; // message as each motor finishes
@@ -771,10 +763,14 @@ class AccelStepperShift : public BeginRun {
       return ! ( limit_switch_bit_vector[ byte_i ] & (1 << offset) );
     }
 
-    void goto_limit(boolean drop_down_first=true) {
+    void goto_limit(boolean drop_down_first = true) {
       // move all motors to the limit switch
       // skip this if no limit switches
-      if (! digitalRead(fake_limit_pin)) return;
+      if (! digitalRead(fake_limit_pin))
+      {
+        Serial << F(" GOTO LIMIT IS OFF") << endl;
+        return;
+      }
 
       boolean doing_fake_limit = false; // fake all limit switch if jumper on FAKE_LIMIT_PIN
 

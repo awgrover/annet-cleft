@@ -36,15 +36,18 @@ class Animation : public BeginRun {
     virtual boolean run() {
       // move us through the states
       // override if you have weirdness
+      State last_state = state;
+      boolean handled = false; // actuall, "is still running?"
+      
       switch (state) {
         case Restart:
           restart();
-          return true;
+          handled = true;
           break;
 
         case Starting:
           startup();
-          return true;
+          handled = true;
           break;
 
         case Running:
@@ -54,7 +57,7 @@ class Animation : public BeginRun {
 
         case Stopping:
           stopping();
-          return true;
+          handled = true;
           break;
 
         case Idle:
@@ -63,8 +66,11 @@ class Animation : public BeginRun {
         case Off:
           // don't restart
           break;
+
+          
       }
-      return false; // IFF working
+      if (last_state != state) Serial << F("  state ") << state << endl;
+      return handled; // IFF working
     }
 
     // state functions, override as needed
@@ -102,6 +108,7 @@ class AnimationNoop  : public Animation {
     }
 
     void restart() {
+      Serial << F("noop anim") << endl;
       state = Idle;
     }
 
@@ -128,6 +135,7 @@ class AnimationHome  : public Animation {
     }
 
     void restart() {
+      Serial << F("home anim") << endl;
       for (int i = 0; i < all_motors->motor_ct; i++) {
         // easiest to just set all motors
         all_motors->motors[i]->setMaxSpeed(AccelStepperShift::MAX_SPEED);

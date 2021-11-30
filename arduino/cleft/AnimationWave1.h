@@ -141,7 +141,7 @@ class AnimationWave1  : public Animation {
             //  could fix by testing [7..14] instead...
             all_motors->motors[i]->moveTo( - all_motors->motors[i]->currentPosition() );
             all_motors->motors[all_motors->motor_ct - i - 1]->moveTo( - all_motors->motors[i]->currentPosition() );
-            Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
+            //Serial << F("AW chg dir ") << millis() << F(" ") << i << F(" ") << (all_motors->motors[i]->currentPosition() > 0 ? -1 : 1) << endl;
 
             // only need to count cycles at motor[0]
             if (i == 0 ) {

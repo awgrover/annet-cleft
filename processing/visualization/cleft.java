@@ -9,7 +9,7 @@ class Cleft {
 
   static final int SEGMENT_CT=15;
   static final int in_circle = 15;
-  static final float STEPS_METER = 7.2f * 200; // fixme: get from arduino
+  static final float STEPS_METER = 30.0f * 200; // 40 seems reality, but 30 makes it visible here
 
   // Height of the outer edge of each segment
   // 0 = "center", so, we can go +/-

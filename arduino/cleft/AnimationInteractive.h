@@ -4,8 +4,6 @@
 #include "Animation.h"
 #include "every.h"
 
-Timer bob(0);
-
 class AnimationWornPosture  : public Animation {
     // FIXME: this could be a catmull-rom target
     /* Animation of being worn:
@@ -16,10 +14,11 @@ class AnimationWornPosture  : public Animation {
   public:
     const float amplitude; // in steps
     const unsigned int time_to_position; // msec to reach position
-    const int breath_time; // inhale time
     const int breathing_amplitude;
+    enum BreathStates { BreathHold, BreathIn, BreathOut, BreathingTimesCount };
+    BreathStates breath_state; // start on a hold
+    unsigned int breathing_times[BreathingTimesCount];
     Timer *breath;
-    int direction = -1; // we'll exhale first
 
     // "half" the segments: notionally 1..7 (8 dups 7) mirror for 9..15
     // precalced positions see worn-posture.py
@@ -29,90 +28,162 @@ class AnimationWornPosture  : public Animation {
     AnimationWornPosture(AccelStepperShift* all_motors,
                          float amplitude_meters,
                          int time_to_position,
-                         unsigned int breath_time, // how long an inhale takes, and how long to hold
-                         int breathing_amplitude // cm
+                         float breathing_amplitude, // m
+                         unsigned int breath_in, // how long
+                         unsigned int breath_out, // how long
+                         unsigned int breath_pause // how log
                         )
 
       : Animation(all_motors),
-        amplitude(amplitude_meters * AccelStepperShift::STEPS_METER),
+        amplitude( meters_to_steps(amplitude_meters) ),
         time_to_position(time_to_position),
-        breath_time(breath_time),
-        breathing_amplitude( meters_to_steps( breathing_amplitude / 100.0 ) )
+        breathing_amplitude( meters_to_steps( breathing_amplitude ) )
     {
-      breath = new Timer(breath_time, false);
+      breath_state = BreathHold;
+      breathing_times[BreathIn] = breath_in;
+      breathing_times[BreathOut] = breath_in;
+      breathing_times[BreathHold] = breath_in;
+      breath = new Timer(breath_pause, false);
     }
 
     void restart() {
-      // just set targets
-      Serial << F("WP start") << endl;
+      // Move to initial "shape"
+
+      Serial << F("Worn start to " ) << amplitude << F(" in ") << time_to_position << F("msec") << endl;
 
       for (unsigned int i = 0; i < array_size(positions); i++) {
         // annet liked it being not perfectly balanced
         // so, systematically reduce speed:
         int target_position = positions[i] * amplitude;
+        int delta = target_position - all_motors->motors[i]->currentPosition();
         // to go half the distance in half the time:
         // (keep in float for small values)
-        float accel = (2.0 * target_position / 2) / ((time_to_position * time_to_position) / 2);
-        float speed = accel * time_to_position / 2; // final speed
-        if (speed < 1) speed = 1.0;
-        Serial << F("## ") << i << F(" ") << int(speed) << endl;
-
+        float accel = (2.0 * abs(delta) / 2) / ((time_to_position / 1000 * time_to_position / 1000) / 2);
+        if (accel < 10) accel = 10.0;
+        float speed = accel * time_to_position / 1000 / 2; // final speed
+        if (speed < 1) speed = 10.0;
+        /*Serial << F("## ") << i << F("/") << (all_motors->motor_ct - i - 1) << (i == 6 ? "&7" : "")
+               << F(" to ") << target_position
+               << F(" delta ") << delta
+               << F(" ") << int(speed) << F(" st/sec")
+               << F(" ") << accel << F(" st/sec-sec")
+               << endl;
+        */
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
         all_motors->motors[i]->moveTo(target_position);
-        if (i == 7) {
-          // 8=7
-          all_motors->motors[8]->setMaxSpeed(speed);
-          all_motors->motors[8]->setAcceleration(accel);
-          all_motors->motors[8]->moveTo(target_position);
+        if (i == 6) {
+          // 7=6
+          all_motors->motors[7]->setMaxSpeed(speed);
+          all_motors->motors[7]->setAcceleration(accel);
+          all_motors->motors[7]->moveTo(target_position);
         }
         // mirrors 9..15
-        all_motors->motors[all_motors->motor_ct - i]->setMaxSpeed(speed);
-        all_motors->motors[all_motors->motor_ct - i]->setAcceleration(accel);
-        all_motors->motors[all_motors->motor_ct - i]->moveTo(target_position);
+        all_motors->motors[all_motors->motor_ct - i - 1]->setMaxSpeed(speed);
+        all_motors->motors[all_motors->motor_ct - i - 1]->setAcceleration(accel);
+        all_motors->motors[all_motors->motor_ct - i - 1]->moveTo(target_position);
       }
 
-      state = Starting;
+      breath_state = BreathHold;
+      state = Starting; // move to initial position
     }
 
     void begin() {
     }
 
     void startup() {
-      // wait till we get in position
-      // re-used to do breating
+      // moving, wait till we get to the position from startup OR running
+      // then go to running() and decide what to do next
+      // re-used to do breathing
+      static Every debug(200);
+
       for (int i = 0; i < all_motors->motor_ct; i++) {
+        // if (debug()) Serial << F("[") << i << F(" d ") << all_motors->motors[i]->distanceToGo() << endl;
         if ( all_motors->motors[i]->distanceToGo() != 0 ) return;
       }
-      breath->reset();
+      Serial << F("in position, next bstate ") << breath_state << endl;
+      if (breath_state == BreathHold) {
+        Serial << F("breath hold reset") << endl;
+        breath->reset();
+      }
 
       state = Running;
     }
 
     void running() {
-      // stay running
+      // (we never exit the running/startup cycle on our own)
+      // We are at target position
 
-      // alternate up/down by 1 or 2 cm, taking 1/2 breath time (~1sec), pausing for 1sec
 
-      // "hold" breath
-      if ( ! (*breath)() ) return;
+      // pausing
+      if ( breath_state == BreathHold ) {
+        if (  (*breath)() ) {
+          // if pause is over, go to BreathIn (else wait)
+          Serial << F("Paused, breathin... ") << millis() << endl;
+          breath_state = BreathIn;
+        }
+        return;
+      }
 
-      // change to breathing movement
+      // change direction & time...
+      int direction = 0; // which way
+      unsigned int breath_time = breathing_times[breath_state];
+      BreathStates next_breath_state;
+
+      if ( breath_state == BreathIn ) {
+        direction = 1;
+        next_breath_state = BreathOut;
+      }
+      else if (breath_state == BreathOut ) {
+        direction = -1;
+        next_breath_state = BreathHold;
+      }
+      else {
+        Serial << F("FAIL: Bad State ") << breath_state << endl;
+        while (1) {
+          delay(500);
+        }
+      }
+
+      Serial << F("breath state ") << breath_state
+             << F(" br-amp ") << breathing_amplitude
+             << F(" dir ") << direction
+             << F(" msecs: ") << breath_time
+             <<  endl;
+
       for (int i = 0; i < all_motors->motor_ct; i++) {
-        // the amount of breath is proportional to downwardness
-        // i.e. the shoulders don't move, just chest/back
-        int distance = direction * breathing_amplitude * (1 - positions[i] + 0.5);
-        int accel = 2 * abs(distance) / 2 / ((breath_time * breath_time) / 4);
+        int pos_i = (i <= 6) ? i : ( i == 7 ? 6 : (all_motors->motor_ct - i - 1));
+        float motion_unit = positions[pos_i] > 0 ? 0 : (abs(positions[pos_i]) + 0.5);
+        // from initial position
+        int distance = direction * breathing_amplitude * motion_unit;
+        int target_position = positions[pos_i] * amplitude + distance;
+        // from actual current position
+        int delta = target_position - all_motors->motors[i]->currentPosition();
+        int accel = 2 * abs(delta) / 2 / ((breath_time / 1000 * breath_time / 1000) / 4);
         if (accel < 10) accel = 10;
-        int speed = 0.5 * accel * breath_time / 2;
+        int speed = 0.5 * accel * breath_time / 1000 / 2;
         if (speed < 10) speed = 10;
-        int target_position = positions[i] * amplitude + distance;
+
+        /* Serial << F("## ") << i
+               << F(" pos_i ") << pos_i
+               //<< F(" <=6 ") << (i <= 6) << ((i <= 6) ? '<' : '>')
+               << F(" mu ") << motion_unit
+               << F(" d-initial ") << distance
+               << F(" d-actual ") << delta
+               << F(" target ") << target_position
+               << F(" ") << accel << F(" st/sec-sec")
+               << F(" ") << int(speed) << F(" st/sec")
+               << endl;
+        */
+
         all_motors->motors[i]->setMaxSpeed(speed);
         all_motors->motors[i]->setAcceleration(accel);
         all_motors->motors[i]->moveTo(target_position);
       }
 
-      state = Starting; // cheat reuse
+      breath_state = next_breath_state; // in->out->hold
+
+      state = Starting; // means "wait till finished this movement"
     }
 
     void stopping() {
@@ -131,15 +202,17 @@ class AnimationJitter  : public Animation {
 
     AnimationJitter(AccelStepperShift* all_motors, float amplitude_meters)
       : Animation(all_motors),
-        amplitude(amplitude_meters * AccelStepperShift::STEPS_METER),
+        amplitude(meters_to_steps(amplitude_meters)),
         motor_i(0)
     {
     }
 
     void restart() {
+      Serial << F("jitter anim amplitude ") << amplitude << endl;
+      int speed = 200 * 8 * 2; // 2 revolutions/sec
       for (int i = 0; i < all_motors->motor_ct; i++) {
-        all_motors->motors[i]->setMaxSpeed(AccelStepperShift::MAX_SPEED);
-        all_motors->motors[i]->setAcceleration(AccelStepperShift::MAX_SPEED * 10);
+        all_motors->motors[i]->setMaxSpeed(speed);
+        all_motors->motors[i]->setAcceleration(speed * 10);
       }
 
       state = Running;
@@ -154,8 +227,10 @@ class AnimationJitter  : public Animation {
 
       // ensure we get a different position
       while ( target == all_motors->motors[ motor_i ]->targetPosition() ) {
-        target = meters_to_steps( random(-amplitude, amplitude + 1) / 100.0 );
+        Serial << F("  try motor ") << motor_i << F(" to ") << target << endl;
+        target = random(-amplitude, amplitude + 1);
       }
+      Serial << F("  motor ") << motor_i << F(" to ") << target << endl;
       return target;
     }
 
