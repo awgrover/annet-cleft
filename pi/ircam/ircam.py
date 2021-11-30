@@ -96,6 +96,17 @@ try:
     heartbeat_interacting = (0.2,1.0,0.2,0.1)
     heartbeat = Every( *heartbeat_running )
 
+    # read the starting background temp, only at startup
+    background_temp_file = "/home/pi/background_temp.flag"
+    background_temp = None
+    if os.path.exists(background_temp_file):
+        with open(background_temp_file, 'r') as fh:
+            background_temp = fh.readline().rstrip()
+        print("init background {}".format(background_temp))
+        if background_temp != "":
+            background.background_temp.reset( int( background_temp ))
+            # print("so bg is {}".format(background.background_temp.value))
+
     while True:
         # data for processing is stereotyped:
         # dataname[int|float, ... ,] # note final comma for convenience
@@ -115,6 +126,7 @@ try:
             heartbeat.start
 
         if check_flags():
+            # Send animation?
             file_exists = os.path.exists(send_animation_file)
             #print("flag? {} {}".format(send_animation, send_animation_file))
             want = None
@@ -134,6 +146,8 @@ try:
                 #print("update")
                 heartbeat.interval = want
                 heartbeat.start
+
+        continue
 
         if say_size():
             print("xy[{},{},]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
