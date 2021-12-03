@@ -192,11 +192,11 @@ Animation* Animation::animations[] = {
   new AnimationNoop(stepper_shift), // immediately goes to IDLE, 'a'
   new AnimationHome(stepper_shift), // aka RELAX 'b'
   NULL, // REAR_UP 'c'
-  new AnimationJitter(stepper_shift, 0.02/*cm*/, 5000 /*msec*/), // JITTER 'd'
+  new AnimationJitter(stepper_shift, 0.01/*cm*/, 5000 /*msec*/), // JITTER 'd'
   new AnimationWornPosture( // WORN_POSTURE 'e'
     stepper_shift,
-    0.10 /*m*/, 3000 /*msec*/, // initial posture
-    0.02 /*m*/, 2000, 1000, 1000 /*msec*/ // breath, in,out,pause
+    0.2 /*m*/, 3000 /*msec*/, // initial posture
+    0.01 /*m*/, 4000, 2000, 2000 /*msec*/ // breath, in,out,pause
   ),
   &cute_wave_left, // LEFT_WAVE 'f'
   &cute_wave_right, // RIGHT_WAVE 'g'

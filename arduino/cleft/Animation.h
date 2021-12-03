@@ -38,7 +38,7 @@ class Animation : public BeginRun {
       // override if you have weirdness
       State last_state = state;
       boolean handled = false; // actuall, "is still running?"
-      
+
       switch (state) {
         case Restart:
           restart();
@@ -67,7 +67,7 @@ class Animation : public BeginRun {
           // don't restart
           break;
 
-          
+
       }
       if (last_state != state) Serial << F("  state ") << state << endl;
       return handled; // IFF working
@@ -82,7 +82,7 @@ class Animation : public BeginRun {
     static constexpr int meters_to_steps(const float m) {
       return AccelStepperShift::STEPS_METER * m;
     }
-    
+
     void mirror_moveTo( int left_i, int amplitude) {
       // moves motor [left_i] and the mirror'd right side the same
 
@@ -91,6 +91,45 @@ class Animation : public BeginRun {
       Serial << F("Move ") << left_i << F( " / " ) << (all_motors->motor_ct - left_i - 1) << F(" TO ") << amplitude << endl;
     }
 
+    void start_homing(int time_to_position) {
+      // goto home, taking duration
+      for (int i = 0; i < all_motors->motor_ct; i++) {
+        timed_moveTo( i, 0, time_to_position);
+      }
+    }
+
+    void timed_moveTo(int motor_i, int target_position, int time_to_position) {
+      // Move to a position, taking duration to do it, accel/decel at both ends
+      // short times/distances get rounded to some minimum
+
+      int delta = target_position - all_motors->motors[motor_i]->currentPosition();
+      // to go half the distance in half the time:
+      // (keep in float for small values)
+      float accel = (2.0 * abs(delta) / 2) / ((time_to_position / 1000 * time_to_position / 1000) / 2);
+      if (accel < 10) accel = 10.0;
+      float speed = accel * time_to_position / 1000 / 2; // final speed
+      if (speed < 1) speed = 10.0;
+      /*Serial << F("## ") << i << F("/") << (all_motors->motor_ct - i - 1) << (i == 6 ? "&7" : "")
+             << F(" to ") << target_position
+             << F(" delta ") << delta
+             << F(" ") << int(speed) << F(" st/sec")
+             << F(" ") << accel << F(" st/sec-sec")
+             << endl;
+      */
+      all_motors->motors[motor_i]->setMaxSpeed(speed);
+      all_motors->motors[motor_i]->setAcceleration(accel);
+      all_motors->motors[motor_i]->moveTo(target_position);
+    }
+
+    boolean at_target() {
+      // are all motors at the target (i.e. ! still moving)
+      for (int i = 0; i < all_motors->motor_ct; i++) {
+        // if (debug()) Serial << F("[") << i << F(" d ") << all_motors->motors[i]->distanceToGo() << endl;
+        if ( all_motors->motors[i]->distanceToGo() != 0 ) return false;
+      }
+      return true;
+    }
+    
     virtual boolean commands(char command) {
       // handle a serial-input character as a command: return true
       // return false otherwise (someone else might handle it)
@@ -113,7 +152,7 @@ class AnimationNoop  : public Animation {
     }
 
     void begin() {
-    }   
+    }
 
     void startup() {
     }

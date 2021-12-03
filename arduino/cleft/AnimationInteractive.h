@@ -19,12 +19,14 @@ class AnimationWornPosture  : public Animation {
     BreathStates breath_state; // start on a hold
     unsigned int breathing_times[BreathingTimesCount];
     Timer *breath;
+    Timer timeout = *(new Timer(10 * 1000)); // exit animation after this long
 
     // "half" the segments: notionally 1..7 (8 dups 7) mirror for 9..15
     // precalced positions see worn-posture.py
     // magnitudes
     static const float positions[7]; // NB: see initialization at bottom
-
+    static const float MidPointBias; // see initialization at bottom
+    
     AnimationWornPosture(AccelStepperShift* all_motors,
                          float amplitude_meters,
                          int time_to_position,
@@ -51,6 +53,8 @@ class AnimationWornPosture  : public Animation {
 
       Serial << F("Worn start to " ) << amplitude << F(" in ") << time_to_position << F("msec") << endl;
 
+      timeout.reset();
+      
       for (unsigned int i = 0; i < array_size(positions); i++) {
         // annet liked it being not perfectly balanced
         // so, systematically reduce speed:
@@ -111,10 +115,14 @@ class AnimationWornPosture  : public Animation {
     }
 
     void running() {
-      // (we never exit the running/startup cycle on our own)
+      // breathing...
       // We are at target position
 
-
+      if (timeout()) {
+        Serial << F("TIMEOUT stopping") << endl;
+        state = Stopping;
+        return;
+      }
       // pausing
       if ( breath_state == BreathHold ) {
         if (  (*breath)() ) {
@@ -153,7 +161,9 @@ class AnimationWornPosture  : public Animation {
 
       for (int i = 0; i < all_motors->motor_ct; i++) {
         int pos_i = (i <= 6) ? i : ( i == 7 ? 6 : (all_motors->motor_ct - i - 1));
-        float motion_unit = positions[pos_i] > 0 ? 0 : (abs(positions[pos_i]) + 0.5);
+        // commented out limits breathing to the segments below 0, i.e. front/rear
+        //float motion_unit = positions[pos_i] > 0 ? 0 : (abs(positions[pos_i]) + MidPointBias);
+        float motion_unit = (abs(positions[pos_i]) + MidPointBias);
         // from initial position
         int distance = direction * breathing_amplitude * motion_unit;
         int target_position = positions[pos_i] * amplitude + distance;
@@ -187,10 +197,16 @@ class AnimationWornPosture  : public Animation {
     }
 
     void stopping() {
-      // we do not go to idle! we hold till told otherwise
+      Serial << F("STOP") << endl;
+      start_homing(2000);
+      while (! at_target() ) {}
+      state = Idle;
     }
 };
-const float AnimationWornPosture::positions[7] = { -0.500, -0.000, 0.366, 0.500, 0.366, -0.000, -0.500}; // cos(-pi/2..pi/2) ct=7 mid=0.5 Sat Nov 27 14:54:14 2021
+// generated from: ./worn-posture-generated
+// cos(-pi/2..pi/2) ct=7 mid=0.8 Fri Dec  3 09:25:45 2021
+const float AnimationWornPosture::MidPointBias = 0.8;
+const float AnimationWornPosture::positions[7] = {-0.800,-0.300, 0.066, 0.200, 0.066,-0.300,-0.800};
 
 class AnimationJitter  : public Animation {
     /* act nervous, jittering around.
