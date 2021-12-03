@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 try:
-    import sys,pathlib,datetime,time,os
+    import sys,pathlib,time,os
+    from datetime import datetime
     ### Check for Pi
     if os.path.exists('/sys/firmware/devicetree/base/model'):
         with open('/sys/firmware/devicetree/base/model') as f:
@@ -33,7 +34,7 @@ try:
 
     i2c = busio.I2C(board.SCL, board.SDA)
 
-    MUX_CHANNEL = 0 # -1 to not use
+    MUX_CHANNEL = 3 # -1 to not use
     mux = i2c if MUX_CHANNEL==-1 else adafruit_tca9548a.TCA9548A(i2c)[MUX_CHANNEL]
     if MUX_CHANNEL==-1:
         print("I2C Direct (no mux)")
@@ -66,7 +67,7 @@ try:
     # startup
     sys.stdout.reconfigure(line_buffering=True)
     print("Start {} {}\n".format( __file__,
-        datetime.datetime.fromtimestamp(pathlib.Path(__file__).stat().st_mtime).isoformat()
+        datetime.fromtimestamp(pathlib.Path(__file__).stat().st_mtime).isoformat()
         )
         )
 
@@ -81,6 +82,8 @@ try:
     warmed_up.start()
 
     check_flags = Every(3.0)
+    first_flag = True
+    flag_what = "n/a"
 
     # whether we should tell the arduino which animation to run (if file exists)
     send_animation_file = "/home/pi/send_animation.flag"
@@ -115,7 +118,7 @@ try:
 
         if heartbeat():
             polarity = heartbeat.i % 2 # 0=off, 1=on
-            cmd = "echo {} | sudo tee /sys/class/leds/led0/brightness".format(polarity)
+            cmd = "echo {} | sudo tee /sys/class/leds/led0/brightness > /dev/null".format(polarity)
             # print(cmd)
             # this really slows us down
             os.system(cmd)
@@ -128,26 +131,29 @@ try:
         if check_flags():
             # Send animation?
             file_exists = os.path.exists(send_animation_file)
-            #print("flag? {} {}".format(send_animation, send_animation_file))
+            if first_flag:
+                print("send_animation? {} {}".format(send_animation, send_animation_file))
+                first_flag = False
             want = None
             send_animation = False
 
             if not file_exists:
                 want = heartbeat_running
+                flag_what = "no send animation"
                 #print("running!")
             elif not warmed_up.running:
                 send_animation = True
                 want = heartbeat_interacting
+                flag_what = "interacting"
                 #print("interacting!")
             else:
                 want = heartbeat_interactive
+                flag_what = "interactive allowed, warm up in {} secs {}".format( warmed_up.interval[0], datetime.now().isoformat() )
                 #print("interactive!")
             if want != None and want != heartbeat.interval:
-                #print("update")
+                print("update " + flag_what)
                 heartbeat.interval = want
                 heartbeat.start
-
-        continue
 
         if say_size():
             print("xy[{},{},]".format(IR_WIDTH,IR_HEIGHT)) # PROCESSING needs this for the display
