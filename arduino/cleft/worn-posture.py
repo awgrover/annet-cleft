@@ -14,7 +14,7 @@ sub do_worn_posture {
     # cos() for smoothness
     # magnitude -1..1
 
-    my $midpoint_bias = 0.5;
+    my $midpoint_bias = 0.8; # as in, bias downwards
     my $max_height = 10; # cm, probably less?
     my @magnitudes;
 
@@ -25,9 +25,14 @@ sub do_worn_posture {
         push @magnitudes, $magnitude;
         }
 
-    print("{");
+    say "";
+    say "// generated from: ",$0;
+    printf("// cos(-pi/2..pi/2) ct=%d mid=%3.1f %s\n", scalar(@magnitudes), $midpoint_bias, "".localtime() );
+    printf "const float AnimationWornPosture::MidPointBias = %3.1f\n", $midpoint_bias;
+
+    print("const float AnimationWornPosture::positions[7] = {");
     print( join ",", map {sprintf("%6.3f", $_)} @magnitudes);
-    printf("}; // cos(-pi/2..pi/2) ct=%d mid=%3.1f %s\n", scalar(@magnitudes), $midpoint_bias, "".localtime());
+    say("};");
     }
 
 sub main {
