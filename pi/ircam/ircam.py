@@ -30,7 +30,7 @@ try:
     # Constants etc
     WRITE_DATA = True # True to print pixels etc
     MIRRORED = False # mirror left-right of camera == as if facing camera
-    INVERTED = True # mirror top-bottom of camera
+    INVERTED = False # mirror top-bottom of camera
 
     i2c = busio.I2C(board.SCL, board.SDA)
 
