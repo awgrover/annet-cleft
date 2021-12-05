@@ -26,6 +26,8 @@ class Ring:
     def __getitem__(self, i):
         # [i] relative to head, so lifo
         return self._ring[ (self.head + i) % self.count ]
+    def __len__(self):
+        return self.count
 
     def insert(self, v):
         """insert at head, overwriting, increment, so that is first now.

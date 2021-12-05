@@ -2,6 +2,7 @@ import sys
 from abc import ABC, abstractmethod
 from exponential_smooth import ExponentialSmooth
 from copy import copy
+from ring import Ring
 
 class AnalyzerInterface:
     """Implement this in analyzers that are Analyze.add( some_analyzer )"""
@@ -323,6 +324,9 @@ class XY:
         self.x=x
         self.y=y
 
+    def __str__(self):
+        return "({},{})".format(self.x,self.y)
+
     def __eq__(self, other):
         if isinstance(other, XY):
             return self.x==other.x and self.y==other.y
@@ -434,54 +438,74 @@ WORN_POSTURE = chr(ord(JITTER)+1)
 LEFT_WAVE = chr(ord(WORN_POSTURE)+1)
 RIGHT_WAVE = chr(ord(LEFT_WAVE)+1)
 
-def choose_animation( hotspot, was_animation ):
+choose_animation_raw_history = Ring( ord(RIGHT_WAVE) - ord(IDLE) + 1, IDLE ) # the "raw" 
+
+def choose_animation( hotspot ):
     # return an animation #
 
-    # if we don't choose/send an aniimation, the arduino should assume IDLE
+    # if we don't choose/send an aniimation, the arduino should assume no-effect
+    choice = None
+
+    # The instability means we need more rules that are sort of like debounce
+    # So, us last_choices as the history and decide on that
 
     # no-one in view
     if hotspot.was == (-1,-1) and hotspot.now == (-1,-1):
         hotspot.seen()
         #print("animation case IDLE because was & now -1")
-        return IDLE
+        # inside -> exit => RELAX, None, IDLE # takes 3 steps
+        choice = if_ntimes(2, IDLE)
 
     # just exited view
     elif hotspot.now == (-1,-1):
         hotspot.seen()
         #print("animation case RELAX because exited now -1")
-        return RELAX
+        choice = if_ntimes(2, RELAX)
 
     # approached to edge (back)
     elif hotspot.was == (-1,-1) and hotspot.now.y == 2:
         hotspot.seen()
         #print("animation case REAR_UP because was -1, now.y==2")
-        return REAR_UP
+        # the RELAX and IDLE "debounce" should make this not need debounce
+        choice = if_ntimes(1, REAR_UP) # immediate, exiting is debounced
 
     # l|r|back -> center : jitter
     elif hotspot.was != (1,1) and hotspot.was.y != 0 and hotspot.now == (1,1):
         hotspot.seen()
         #print("animation case JITTTER because was not center, now 1,1")
-        return JITTER
+        choice = if_ntimes(1,JITTER) # immediate, can't oscillate with worn
 
     # center-front: worn posture
     elif hotspot.now == (1,0):
         hotspot.seen()
         #print("animation case WORN because front 1,0")
-        return WORN_POSTURE # with breathing
+        # fast start jitter, debounce the others that are "exiting" worn
+        choice = if_ntimes(1,WORN_POSTURE) # with breathing, immediate, adjacents are debounced
 
     # left/right : wave big, then small slow (caress)
-    elif hotspot.now.x == 0:
+    elif hotspot.now.x == 0 or hotspot.now.x == 2:
         hotspot.seen()
-        #print("animation case LEFT because x=0")
-        return LEFT_WAVE
-
-    # left/right : wave big, then small slow (caress)
-    elif hotspot.now.x == 2:
-        hotspot.seen()
-        #print("animation case RIGHT because x=2")
-        return RIGHT_WAVE
+        might_be = LEFT_WAVE if hotspot.now.x == 0 else RIGHT_WAVE
+        if hotspot.was == (-1,-1):
+            #print("animation case LEFT because x=0, and from outside")
+            choice = might_be # immediate on "entry"
+        else:
+            # debounce
+            #print("animation case LEFT because x=0, but debounce")
+            choice = if_ntimes(2, (LEFT_WAVE if hotspot.now.x == 0 else RIGHT_WAVE) )
 
     else:
         #print( "animation NOT CATEGORIZED {},{}, {},{}".format(hotspot.was.x, hotspot.was.y, hotspot.now.x, hotspot.now.y) )
         hotspot.seen()
-        return None
+        choice = if_ntimes(2, None) # covers worn->jitter debounce
+        choice = None
+
+    return choice if choice else None
+
+def if_ntimes(n, animation):
+    """does animation appear n times in a row from now, including this time: return animation else False"""
+    choose_animation_raw_history.insert(animation)
+    for counting in range(n):
+        if choose_animation_raw_history[counting] != animation:
+            return False
+    return animation

@@ -167,6 +167,11 @@ try:
             sys.stdout.write("[") # PROCESSING temp array
             for row_i,row in enumerate(reversed(amg.pixels) if INVERTED else amg.pixels):
                 for col_i, temp in enumerate(reversed(row) if MIRRORED else row): # mirrored if facing camera
+
+                    # i've seen glitches of all zeros, <10 is obv bad
+                    if temp < 10:
+                        continue
+
                     # I choose to round to .1, raw data is rounded to .25's
                     smoothed_pixels[row_i][col_i] = round(
                         (exp_smooth-1)*(smoothed_pixels[row_i][col_i]/exp_smooth) + temp/exp_smooth,
